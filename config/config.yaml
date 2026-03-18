@@ -1,20 +1,17 @@
-gemini:
-  api_key: ""                         # or GEMINI_API_KEY env var
-  model: "gemini-2.0-flash-exp"
-  sample_rate: 24000
-
 audio:
-  device: ""                          # PyAudio device name (empty = default)
-
-ssl:
-  tracker_addr: "224.5.23.2"
-  tracker_port: 10010
-  gc_addr: "224.5.23.1"
-  gc_port: 10003
-  our_team_color: "blue"              # "blue" or "yellow"
-  our_team_name: "ibis"               # Team name for initial context
-
+  device: ''
 commentary:
-  mode: "reflex_analyst"
-  writer_update_rate: 1.0             # Hz
-  analyst_silence_threshold: 5.0      # seconds
+  analyst_silence_threshold: 5
+  mode: reflex_analyst
+  writer_update_rate: 1
+gemini:
+  api_key: ''
+  model: gemini-2.5-flash-native-audio-preview-12-2025
+  sample_rate: 24000
+ssl:
+  gc_addr: 224.5.23.1
+  gc_port: 11003
+  our_team_color: blue
+  our_team_name: ibis
+  tracker_addr: 224.5.23.2
+  tracker_port: 11010
