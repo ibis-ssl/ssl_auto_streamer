@@ -1,5 +1,11 @@
 /* SSL Auto Streamer Web UI */
 
+@font-face {
+  font-family: 'DSEG7';
+  src: url('/static/fonts/DSEG7Classic-Bold.woff2') format('woff2');
+  font-weight: bold;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -58,6 +64,9 @@ nav {
   cursor: pointer;
   font-size: 13px;
   transition: all 0.15s;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
 }
 
 .tab-btn.active {
@@ -175,9 +184,16 @@ main {
 .team-name.yellow { color: #e3b341; }
 
 .team-score {
+  font-family: 'DSEG7', monospace;
   font-size: 36px;
   font-weight: 700;
   line-height: 1;
+}
+
+#elapsed-time {
+  font-family: 'DSEG7', monospace;
+  font-size: 13px;
+  letter-spacing: 1px;
 }
 
 .score-sep {

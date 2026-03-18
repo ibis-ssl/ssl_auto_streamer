@@ -133,6 +133,7 @@ class CommentaryApp:
                 config=config,
                 config_dir=self._config_dir,
                 on_config_update=self._on_web_config_update,
+                get_team_names=lambda: (self._our_team_name, self._their_team_name),
             )
 
         # Event cooldowns

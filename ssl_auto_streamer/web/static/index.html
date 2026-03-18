@@ -13,7 +13,10 @@
   <nav>
     <button class="tab-btn active" id="tab-dashboard">ダッシュボード</button>
     <button class="tab-btn" id="tab-settings">設定</button>
+    <a class="tab-btn" href="/overlay" target="_blank" title="OBSオーバーレイを開く">配信オーバーレイ</a>
+    <a class="tab-btn" href="/overlay-control" target="_blank" title="オーバーレイ制御">制御</a>
   </nav>
+  <button class="tab-btn" id="sound-toggle-btn" title="効果音のON/OFF">🔊 効果音</button>
   <div id="ws-status">
     <div id="ws-dot"></div>
     <span id="ws-label">接続中...</span>
@@ -172,6 +175,8 @@
 
 </main>
 
+<script src="/static/js/ws-utils.js"></script>
+<script src="/static/js/sounds.js"></script>
 <script src="/static/js/field.js"></script>
 <script src="/static/js/config.js"></script>
 <script src="/static/js/app.js"></script>

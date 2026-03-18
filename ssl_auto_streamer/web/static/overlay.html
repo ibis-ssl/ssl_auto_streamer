@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>SSL Auto Streamer — Overlay</title>
+  <link rel="stylesheet" href="/static/css/overlay.css">
+</head>
+<body>
+
+<!-- 上部スコアバー -->
+<div id="hud">
+  <div class="team-block" id="team-left">
+    <div class="team-color-bar"></div>
+    <div class="team-name" id="name-left">Blue</div>
+    <div class="team-score" id="score-left">-</div>
+  </div>
+
+  <div id="hud-center">
+    <div id="hud-timer">--:--</div>
+    <div id="hud-situation">-</div>
+  </div>
+
+  <div class="team-block" id="team-right">
+    <div class="team-color-bar"></div>
+    <div class="team-name" id="name-right">Yellow</div>
+    <div class="team-score" id="score-right">-</div>
+  </div>
+</div>
+
+<!-- 下部テロップ -->
+<div id="ticker-area"></div>
+
+<script src="/static/js/ws-utils.js"></script>
+<script src="/static/js/sounds.js"></script>
+<script src="/static/js/overlay.js"></script>
+</body>
+</html>

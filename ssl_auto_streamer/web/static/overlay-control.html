@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>オーバーレイ制御</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    body { overflow-y: auto; }
+    .ctrl-panel {
+      max-width: 500px;
+      margin: 24px auto;
+      padding: 0 16px;
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+    .ctrl-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .ctrl-section h3 {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .switch {
+      position: relative;
+      width: 42px;
+      height: 24px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 3px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s;
+    }
+    .switch input:checked + .slider { background: var(--blue); }
+    .switch input:checked + .slider::before { transform: translateX(18px); }
+
+    .ticker-form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ticker-form input[type="text"] { width: 100%; }
+    #ws-status-ctrl {
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #ws-dot-ctrl {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+    #ws-dot-ctrl.ok { background: var(--green); }
+    .overlay-link {
+      display: block;
+      font-size: 13px;
+      color: var(--blue);
+      padding: 8px 0;
+      text-decoration: none;
+    }
+    .overlay-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+<div class="ctrl-panel">
+  <h2>オーバーレイ制御</h2>
+
+  <div id="ws-status-ctrl">
+    <div id="ws-dot-ctrl"></div>
+    <span id="ws-label-ctrl">接続中...</span>
+  </div>
+
+  <div class="ctrl-section">
+    <h3>リンク</h3>
+    <a class="overlay-link" id="overlay-link" href="/overlay" target="_blank">/overlay — OBSブラウザソース用</a>
+    <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">
+      OBS → ブラウザソース → URL に上記アドレスを設定
+    </p>
+  </div>
+
+  <div class="ctrl-section">
+    <h3>HUD 表示制御</h3>
+    <div class="toggle-row">
+      <span>スコアバー表示</span>
+      <label class="switch">
+        <input type="checkbox" id="toggle-hud" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <span>効果音 (オーバーレイ側)</span>
+      <label class="switch">
+        <input type="checkbox" id="toggle-sound" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="ctrl-section">
+    <h3>手動テロップ</h3>
+    <div class="ticker-form">
+      <input type="text" id="ticker-text" placeholder="テキストを入力してオーバーレイに表示">
+      <button class="btn btn-primary" id="send-ticker-btn">送信 (5秒)</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/ws-utils.js"></script>
+<script src="/static/js/overlay-control.js"></script>
+</body>
+</html>

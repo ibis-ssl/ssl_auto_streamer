@@ -1,0 +1,201 @@
+/* SSL Auto Streamer — OBS 配信オーバーレイ */
+
+@font-face {
+  font-family: 'DSEG7';
+  src: url('/static/fonts/DSEG7Classic-Bold.woff2') format('woff2');
+  font-weight: bold;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --blue:   #388bfd;
+  --yellow: #e3b341;
+  --green:  #3fb950;
+  --red:    #f85149;
+  --gold:   #ffd700;
+  --hud-bg: rgba(10, 10, 10, 0.82);
+  --text:   #f0f0f0;
+  --shadow: rgba(0, 0, 0, 0.8);
+}
+
+/* OBS transparent background */
+html, body {
+  background: transparent;
+  overflow: hidden;
+  width: 1920px;
+  height: 1080px;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+/* ===== Top HUD ===== */
+#hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: stretch;
+  height: 90px;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.4s ease;
+}
+
+#hud.hidden {
+  transform: translateY(-100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* チームブロック(左右) */
+.team-block {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--hud-bg);
+  flex: 1;
+  max-width: 680px;
+  overflow: hidden;
+}
+
+#team-left {
+  border-radius: 0 0 12px 0;
+}
+
+#team-right {
+  flex-direction: row-reverse;
+  border-radius: 0 0 0 12px;
+}
+
+.team-color-bar {
+  width: 8px;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+#team-left .team-color-bar  { background: var(--blue); }
+#team-right .team-color-bar { background: var(--yellow); }
+
+.team-name {
+  font-size: 28px;
+  font-weight: 700;
+  padding: 0 20px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: 1px 1px 4px var(--shadow);
+}
+
+#team-left  .team-name { text-align: left;  color: #8bbfff; }
+#team-right .team-name { text-align: right; color: #f0ca6a; }
+
+.team-score {
+  font-family: 'DSEG7', monospace;
+  font-size: 52px;
+  font-weight: bold;
+  padding: 0 20px;
+  line-height: 1;
+  text-shadow: 0 0 12px var(--shadow);
+  flex-shrink: 0;
+}
+
+/* スコア変化時のフラッシュ */
+.team-score.flash {
+  animation: scoreFlash 0.6s ease-out;
+}
+
+@keyframes scoreFlash {
+  0%   { color: var(--gold); text-shadow: 0 0 20px var(--gold); }
+  100% { color: var(--text); text-shadow: 0 0 12px var(--shadow); }
+}
+
+/* 中央タイマーブロック */
+#hud-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--hud-bg);
+  padding: 0 28px;
+  min-width: 280px;
+  gap: 4px;
+  border-radius: 0 0 12px 12px;
+}
+
+#hud-timer {
+  font-family: 'DSEG7', monospace;
+  font-size: 40px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  line-height: 1;
+}
+
+#hud-situation {
+  font-size: 13px;
+  color: rgba(200, 200, 200, 0.85);
+  text-align: center;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ===== テロップ(下部) ===== */
+#ticker-area {
+  position: fixed;
+  bottom: 40px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.ticker {
+  background: var(--hud-bg);
+  border-left: 5px solid var(--blue);
+  padding: 10px 28px;
+  border-radius: 0 8px 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+  max-width: 900px;
+  text-align: center;
+  animation: tickerIn 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  text-shadow: 1px 1px 4px var(--shadow);
+}
+
+.ticker.goal {
+  border-left-color: var(--gold);
+  background: rgba(30, 20, 0, 0.9);
+  font-size: 32px;
+  color: var(--gold);
+}
+
+.ticker.foul {
+  border-left-color: var(--red);
+}
+
+.ticker.commentary {
+  border-left-color: var(--green);
+  font-size: 20px;
+  color: rgba(220, 240, 220, 0.9);
+}
+
+.ticker.fade-out {
+  animation: tickerOut 0.4s ease-in forwards;
+}
+
+@keyframes tickerIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tickerOut {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(-10px); }
+}

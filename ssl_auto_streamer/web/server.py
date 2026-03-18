@@ -40,6 +40,7 @@ class WebServer:
         config: Dict[str, Any],
         config_dir: Path,
         on_config_update: Optional[Callable[[Dict[str, Any]], None]] = None,
+        get_team_names: Optional[Callable[[], tuple]] = None,
     ):
         self._host = host
         self._port = port
@@ -48,9 +49,10 @@ class WebServer:
         self._config = config
         self._config_dir = config_dir
         self._on_config_update = on_config_update
+        self._get_team_names = get_team_names
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
-        self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=20)
+        self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=10)
         self._event_log: Deque[Dict[str, Any]] = deque(maxlen=20)
         self._tracker_last_seen: float = 0.0
         self._gc_last_seen: float = 0.0
@@ -66,6 +68,8 @@ class WebServer:
 
     def _setup_routes(self) -> None:
         self._app.router.add_get("/", self._handle_index)
+        self._app.router.add_get("/overlay", self._handle_overlay)
+        self._app.router.add_get("/overlay-control", self._handle_overlay_control)
         self._app.router.add_get("/ws", self._handle_ws)
         self._app.router.add_get("/api/config", self._handle_get_config)
         self._app.router.add_post("/api/config", self._handle_post_config)
@@ -172,6 +176,7 @@ class WebServer:
         except Exception:
             field_snapshot = {}
 
+        team_info = self._build_team_info()
         return {
             "type": "state",
             "game_state": game_state,
@@ -179,8 +184,31 @@ class WebServer:
             "robots_summary": robots_summary,
             "field_snapshot": field_snapshot,
             "status": self._build_status_dict(),
-            "commentary_history": list(self._commentary_history)[-10:],
+            "commentary_history": list(self._commentary_history),
             "event_log": list(self._event_log),
+            "team_info": team_info,
+        }
+
+    def _build_team_info(self) -> Dict[str, Any]:
+        """Build team info dict from config and optional team names callback."""
+        ssl_cfg = self._config.get("ssl", {})
+        our_color = ssl_cfg.get("our_team_color", "blue")
+        our_name = ssl_cfg.get("our_team_name", "")
+        their_name = ""
+
+        if self._get_team_names:
+            try:
+                ours, theirs = self._get_team_names()
+                if ours:
+                    our_name = ours
+                if theirs:
+                    their_name = theirs
+            except Exception:
+                pass
+
+        return {
+            "ours": {"name": our_name, "color": our_color},
+            "theirs": {"name": their_name, "color": "yellow" if our_color == "blue" else "blue"},
         }
 
     async def _broadcast(self, msg: str) -> None:
@@ -200,6 +228,12 @@ class WebServer:
     async def _handle_index(self, request: web.Request) -> web.FileResponse:
         return web.FileResponse(self._static_dir / "index.html")
 
+    async def _handle_overlay(self, request: web.Request) -> web.FileResponse:
+        return web.FileResponse(self._static_dir / "overlay.html")
+
+    async def _handle_overlay_control(self, request: web.Request) -> web.FileResponse:
+        return web.FileResponse(self._static_dir / "overlay-control.html")
+
     async def _handle_ws(self, request: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse()
         await ws.prepare(request)
@@ -211,7 +245,14 @@ class WebServer:
             await ws.send_str(json.dumps(state, ensure_ascii=False))
 
             async for msg in ws:
-                if msg.type == aiohttp.WSMsgType.ERROR:
+                if msg.type == aiohttp.WSMsgType.TEXT:
+                    try:
+                        data = json.loads(msg.data)
+                        if data.get("type") == "overlay_control":
+                            await self._broadcast(msg.data)
+                    except Exception:
+                        pass
+                elif msg.type == aiohttp.WSMsgType.ERROR:
                     break
         finally:
             self._ws_clients.discard(ws)

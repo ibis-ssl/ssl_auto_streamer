@@ -4,9 +4,9 @@
 
 // ===== State =====
 let fieldRenderer = null;
-let ws = null;
-let wsReconnectTimer = null;
+let wsClient = null;
 let lastState = null;
+const soundManager = new SoundManager();
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,8 +21,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const canvas = document.getElementById('field-canvas');
   fieldRenderer = new FieldRenderer(canvas);
 
+  // Sound toggle button
+  const soundBtn = document.getElementById('sound-toggle-btn');
+  soundBtn.addEventListener('click', () => {
+    const enabled = soundManager.toggle();
+    soundBtn.textContent = enabled ? '🔊 効果音' : '🔇 効果音';
+    soundBtn.classList.toggle('active', enabled);
+    if (enabled) soundManager.warmup();
+  });
+  soundBtn.classList.add('active');
+
   // Connect WebSocket
-  connectWS();
+  wsClient = createWSClient({
+    onOpen:    () => setWSStatus('connected', '接続中'),
+    onClose:   () => setWSStatus('error', '切断'),
+    onError:   () => setWSStatus('error', 'エラー'),
+    onMessage: (evt) => {
+      try {
+        handleMessage(JSON.parse(evt.data));
+      } catch (e) {
+        console.error('WS parse error:', e);
+      }
+    },
+  });
+  wsClient.connect();
 });
 
 function showTab(name) {
@@ -36,40 +58,9 @@ function showTab(name) {
   }
 }
 
-// ===== WebSocket =====
-function connectWS() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}/ws`);
-
-  ws.onopen = () => {
-    setWSStatus('connected', '接続中');
-    if (wsReconnectTimer) { clearTimeout(wsReconnectTimer); wsReconnectTimer = null; }
-  };
-
-  ws.onclose = () => {
-    setWSStatus('error', '切断');
-    wsReconnectTimer = setTimeout(connectWS, 3000);
-  };
-
-  ws.onerror = () => {
-    setWSStatus('error', 'エラー');
-  };
-
-  ws.onmessage = (evt) => {
-    try {
-      const msg = JSON.parse(evt.data);
-      handleMessage(msg);
-    } catch (e) {
-      console.error('WS parse error:', e);
-    }
-  };
-}
-
 function setWSStatus(cls, text) {
-  const dot = document.getElementById('ws-dot');
-  const label = document.getElementById('ws-label');
-  dot.className = cls;
-  label.textContent = text;
+  document.getElementById('ws-dot').className = cls;
+  document.getElementById('ws-label').textContent = text;
 }
 
 // ===== Message Handling =====
@@ -79,6 +70,7 @@ function handleMessage(msg) {
     updateDashboard(msg);
   } else if (msg.type === 'event') {
     appendEventLog(msg);
+    soundManager.playForEvent(msg.event_type);
   } else if (msg.type === 'commentary') {
     appendCommentary(msg);
   }
