@@ -443,6 +443,38 @@ class WorldModelWriter:
             ]
             return {"highlights": highlights_data, "total_available": len(filtered)}
 
+    def get_field_snapshot_data(self) -> Dict[str, Any]:
+        """Return ball and robot positions for field visualization."""
+        with self._lock:
+            robots_ours = []
+            for r in self._robot_snapshots_ours.values():
+                if r.is_available:
+                    robots_ours.append({
+                        "id": r.robot_id,
+                        "x": round(r.position[0], 3),
+                        "y": round(r.position[1], 3),
+                        "theta": round(r.position[2], 3),
+                        "has_ball": r.has_ball_contact,
+                    })
+            robots_theirs = []
+            for r in self._robot_snapshots_theirs.values():
+                if r.is_available:
+                    robots_theirs.append({
+                        "id": r.robot_id,
+                        "x": round(r.position[0], 3),
+                        "y": round(r.position[1], 3),
+                        "theta": round(r.position[2], 3),
+                        "has_ball": r.has_ball_contact,
+                    })
+            return {
+                "ball": {
+                    "x": round(self._current_ball_pos[0], 3),
+                    "y": round(self._current_ball_pos[1], 3),
+                },
+                "robots_ours": robots_ours,
+                "robots_theirs": robots_theirs,
+            }
+
     # ========== Helper Methods ==========
 
     def _build_robot_snapshot_from_tracked(

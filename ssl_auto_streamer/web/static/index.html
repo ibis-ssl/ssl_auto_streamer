@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SSL Auto Streamer</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<header>
+  <h1>SSL Auto Streamer</h1>
+  <nav>
+    <button class="tab-btn active" id="tab-dashboard">ダッシュボード</button>
+    <button class="tab-btn" id="tab-settings">設定</button>
+  </nav>
+  <div id="ws-status">
+    <div id="ws-dot"></div>
+    <span id="ws-label">接続中...</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ===== Dashboard ===== -->
+  <div id="dashboard" class="tab-content active">
+
+    <!-- Scoreboard -->
+    <div class="panel" id="scoreboard">
+      <div class="panel-header">スコアボード</div>
+      <div class="score-row">
+        <div class="team-block">
+          <div class="team-name blue">自チーム (Blue)</div>
+          <div class="team-score" id="score-ours">-</div>
+        </div>
+        <div class="score-sep">:</div>
+        <div class="team-block">
+          <div class="team-name yellow">相手チーム (Yellow)</div>
+          <div class="team-score" id="score-theirs">-</div>
+        </div>
+      </div>
+      <div class="score-meta">
+        <span>⏱ <span id="elapsed-time">00:00</span></span>
+        <span>🏟 <span id="play-situation">-</span></span>
+        <span>📊 <span id="momentum">-</span></span>
+      </div>
+    </div>
+
+    <!-- Field -->
+    <div class="panel" id="field-panel">
+      <div class="panel-header">フィールド</div>
+      <canvas id="field-canvas"></canvas>
+    </div>
+
+    <!-- Right column -->
+    <div id="right-col">
+
+      <!-- System Status -->
+      <div class="panel">
+        <div class="panel-header">システム状態</div>
+        <div class="panel-body">
+          <div class="status-indicators">
+            <div class="status-item" id="status-gemini">
+              <div class="status-dot ng"></div>
+              <span class="status-label">Gemini API: 未接続</span>
+            </div>
+            <div class="status-item" id="status-tracker">
+              <div class="status-dot ng"></div>
+              <span class="status-label">Vision Tracker: 未接続</span>
+            </div>
+            <div class="status-item" id="status-gc">
+              <div class="status-dot ng"></div>
+              <span class="status-label">Game Controller: 未接続</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Event Log -->
+      <div class="panel" id="event-log-panel" style="flex:1;min-height:0;">
+        <div class="panel-header">イベントログ (直近20件)</div>
+        <div class="panel-body">
+          <ul class="log-list" id="event-log-list"></ul>
+        </div>
+      </div>
+
+      <!-- Commentary History -->
+      <div class="panel" style="flex:1;min-height:0;">
+        <div class="panel-header">実況ログ</div>
+        <div class="panel-body">
+          <ul class="log-list" id="commentary-list"></ul>
+        </div>
+      </div>
+
+    </div><!-- /right-col -->
+  </div><!-- /dashboard -->
+
+
+  <!-- ===== Settings ===== -->
+  <div id="settings" class="tab-content">
+    <div class="settings-grid">
+
+      <!-- SSL Settings -->
+      <div class="settings-section">
+        <div class="settings-section-title">SSL 設定</div>
+        <div class="form-group">
+          <label for="cfg-team-color">自チームカラー</label>
+          <select id="cfg-team-color">
+            <option value="blue">Blue</option>
+            <option value="yellow">Yellow</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="cfg-team-name">自チーム名</label>
+          <input type="text" id="cfg-team-name" placeholder="ibis">
+        </div>
+        <div class="form-group">
+          <label for="cfg-tracker-addr">Tracker アドレス</label>
+          <input type="text" id="cfg-tracker-addr" placeholder="224.5.23.2">
+        </div>
+        <div class="form-group">
+          <label for="cfg-tracker-port">Tracker ポート</label>
+          <input type="number" id="cfg-tracker-port" placeholder="10010">
+        </div>
+        <div class="form-group">
+          <label for="cfg-gc-addr">GC アドレス</label>
+          <input type="text" id="cfg-gc-addr" placeholder="224.5.23.1">
+        </div>
+        <div class="form-group">
+          <label for="cfg-gc-port">GC ポート</label>
+          <input type="number" id="cfg-gc-port" placeholder="10003">
+        </div>
+      </div>
+
+      <!-- Commentary Settings -->
+      <div class="settings-section">
+        <div class="settings-section-title">実況設定</div>
+        <div class="form-group">
+          <label for="cfg-silence-threshold">沈黙閾値 (秒)</label>
+          <input type="number" id="cfg-silence-threshold" step="0.5" placeholder="5.0">
+        </div>
+        <div class="form-group">
+          <label for="cfg-update-rate">更新レート (Hz)</label>
+          <input type="number" id="cfg-update-rate" step="0.5" placeholder="1.0">
+        </div>
+      </div>
+
+      <!-- Gemini Settings -->
+      <div class="settings-section">
+        <div class="settings-section-title">Gemini 設定 (要再起動)</div>
+        <div class="form-group">
+          <label for="cfg-gemini-model">モデル</label>
+          <input type="text" id="cfg-gemini-model" placeholder="gemini-2.0-flash-exp">
+        </div>
+        <div class="form-group">
+          <label for="cfg-api-key">API キー (変更時のみ入力)</label>
+          <input type="password" id="cfg-api-key" placeholder="変更しない場合は空欄">
+        </div>
+        <div class="form-group">
+          <label for="cfg-audio-device">音声デバイス (要再起動)</label>
+          <input type="text" id="cfg-audio-device" placeholder="空欄でデフォルト">
+        </div>
+      </div>
+
+    </div><!-- /settings-grid -->
+
+    <div class="settings-actions">
+      <button class="btn btn-primary" id="config-apply-btn">適用</button>
+      <div id="apply-result"></div>
+    </div>
+  </div><!-- /settings -->
+
+</main>
+
+<script src="/static/js/field.js"></script>
+<script src="/static/js/config.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

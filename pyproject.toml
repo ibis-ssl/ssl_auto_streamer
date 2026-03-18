@@ -8,6 +8,7 @@ dependencies = [
     "PyAudio>=0.2.13",
     "PyYAML>=6.0",
     "protobuf>=4.25",
+    "aiohttp>=3.9",
 ]
 
 [project.scripts]

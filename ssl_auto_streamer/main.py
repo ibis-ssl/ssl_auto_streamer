@@ -40,6 +40,7 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
     config.setdefault("audio", {})
     config.setdefault("ssl", {})
     config.setdefault("commentary", {})
+    config.setdefault("web", {})
 
     # Override with CLI arguments
     if args.gemini_api_key:
@@ -59,6 +60,12 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
         config["ssl"]["gc_addr"] = args.gc_addr
     if args.gc_port:
         config["ssl"]["gc_port"] = args.gc_port
+
+    if args.web_port is not None:
+        if args.web_port == 0:
+            config["web"]["enabled"] = False
+        else:
+            config["web"]["port"] = args.web_port
 
     return config
 
@@ -116,6 +123,12 @@ def main() -> None:
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging level (default: INFO)",
+    )
+    parser.add_argument(
+        "--web-port",
+        type=int,
+        default=None,
+        help="Web UI port (default: 8080, 0 to disable)",
     )
 
     args = parser.parse_args()

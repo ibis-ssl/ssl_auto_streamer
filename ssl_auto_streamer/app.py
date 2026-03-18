@@ -27,6 +27,7 @@ from ssl_auto_streamer.audio import PcmAudioOutput
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
 from ssl_auto_streamer.ssl.tracker_client import TrackerClient
 from ssl_auto_streamer.ssl.gc_client import GCClient
+from ssl_auto_streamer.web.server import WebServer
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,7 @@ class CommentaryApp:
         self._gemini_client.set_audio_callback(self._on_audio_received)
         self._gemini_client.set_function_call_handler(self._function_handler.handle)
         self._gemini_client.set_disconnect_callback(self._on_gemini_disconnected)
+        self._gemini_client.set_turn_complete_callback(self._on_turn_complete)
 
         # Audio output
         sample_rate = gemini_cfg.get("sample_rate", 24000)
@@ -118,6 +120,20 @@ class CommentaryApp:
         self._max_reconnect_attempts = 10
         self._next_reconnect_time: float = 0.0
         self._running = False
+
+        # Web server (optional)
+        web_cfg = config.get("web", {})
+        self._web_server: Optional[WebServer] = None
+        if web_cfg.get("enabled", True):
+            self._web_server = WebServer(
+                host=web_cfg.get("host", "0.0.0.0"),
+                port=web_cfg.get("port", 8080),
+                writer=self._writer,
+                gemini_client=self._gemini_client,
+                config=config,
+                config_dir=self._config_dir,
+                on_config_update=self._on_web_config_update,
+            )
 
         # Event cooldowns
         self._last_commentary_time: Dict[str, float] = {}
@@ -174,6 +190,13 @@ class CommentaryApp:
 
         loop = asyncio.get_event_loop()
 
+        # Start web server
+        if self._web_server:
+            try:
+                await self._web_server.start()
+            except Exception as e:
+                logger.error(f"Failed to start web server: {e}")
+
         # Start SSL data receivers
         try:
             await self._tracker_client.start(loop)
@@ -223,12 +246,18 @@ class CommentaryApp:
             await self._gemini_client.disconnect()
 
         self._audio_output.stop()
+
+        if self._web_server:
+            await self._web_server.stop()
+
         logger.info("Shutdown complete")
 
     def _on_tracker_frame(self, frame: Any) -> None:
         """Handle TrackedFrame from TrackerClient."""
         try:
             self._writer.update_from_tracker(frame, self._our_team_is_blue)
+            if self._web_server:
+                self._web_server.update_tracker_seen()
             events = self._event_detector.update_from_tracker(frame)
             for event in events:
                 self._on_detected_event(event)
@@ -239,6 +268,8 @@ class CommentaryApp:
         """Handle Referee message from GCClient."""
         try:
             self._writer.update_from_referee(referee, self._our_team_is_blue)
+            if self._web_server:
+                self._web_server.update_gc_seen()
             self._update_team_names_from_referee(referee)
             events = self._event_detector.update_from_referee(referee)
             for event in events:
@@ -296,6 +327,9 @@ class CommentaryApp:
         logger.info(f"Detected event: {event.event_type}")
         self._writer.add_event(event.event_type, event_data)
 
+        if self._web_server:
+            self._web_server.push_event(event.event_type, event_data)
+
         if not self._connected:
             return
 
@@ -317,6 +351,10 @@ class CommentaryApp:
             logger.info(f"Sending reflex commentary for {event.event_type}")
             asyncio.create_task(self._gemini_client.send_text(json_payload))
             self._last_commentary_time[event.event_type] = current_time
+            if self._web_server:
+                self._web_server.push_commentary(
+                    f"[{event.event_type}] {event_data.get('metadata', {}).get('team', '')}"
+                )
 
     async def _analyst_check_loop(self) -> None:
         """Periodic loop to check if analyst commentary should be triggered."""
@@ -336,6 +374,8 @@ class CommentaryApp:
                     if request:
                         json_payload = self._reader.to_gemini_json(request)
                         await self._gemini_client.send_text(json_payload)
+                        if self._web_server:
+                            self._web_server.push_commentary("[アナリスト実況]")
 
     async def _reconnect_loop(self) -> None:
         """Periodic reconnection loop."""
@@ -386,6 +426,10 @@ class CommentaryApp:
         """Handle received audio from Gemini."""
         self._audio_output.play(pcm_data)
 
+    def _on_turn_complete(self) -> None:
+        """Flush tail audio when Gemini signals end of turn."""
+        self._audio_output.flush_buffer()
+
     async def _send_initial_context(self) -> None:
         """Send SSL rules and team info as initial context."""
         if self._initial_context_sent or not self._connected:
@@ -400,6 +444,21 @@ class CommentaryApp:
         logger.info("Sending initial context to Gemini")
         await self._gemini_client.send_text(f"[SYSTEM CONTEXT]\n{context}")
         self._initial_context_sent = True
+
+    def _on_web_config_update(self, config: Dict[str, Any]) -> None:
+        """Apply runtime-reflectable config changes from Web UI."""
+        ssl_cfg = config.get("ssl", {})
+        commentary_cfg = config.get("commentary", {})
+
+        self._our_team_is_blue = ssl_cfg.get("our_team_color", "blue") == "blue"
+        self._our_team_name = ssl_cfg.get("our_team_name", self._our_team_name)
+        self._analyst_threshold = commentary_cfg.get(
+            "analyst_silence_threshold", self._analyst_threshold
+        )
+        self._writer_update_rate = commentary_cfg.get(
+            "writer_update_rate", self._writer_update_rate
+        )
+        logger.info("Config updated from Web UI")
 
     async def _send_team_update(self) -> None:
         """Send team information update to Gemini."""
