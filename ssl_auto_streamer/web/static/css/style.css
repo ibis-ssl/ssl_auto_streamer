@@ -399,3 +399,75 @@ input:focus, select:focus { border-color: var(--blue); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ===== User Input Panel ===== */
+#user-input-panel .panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-row input[type="text"] {
+  flex: 1;
+}
+
+.ptt-row {
+  display: flex;
+}
+
+#ptt-indicator {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  transition: all 0.15s;
+  width: 100%;
+}
+
+.ptt-idle {
+  background: var(--bg);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.ptt-recording {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--red);
+  border: 1px solid var(--red);
+  animation: ptt-pulse 1s infinite;
+}
+
+.ptt-processing {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--yellow);
+  border: 1px solid var(--yellow);
+  animation: ptt-pulse 0.6s infinite;
+}
+
+@keyframes ptt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+/* ===== User Input Event Types ===== */
+.event-type.USER_TEXT { background: rgba(56, 139, 253, 0.15); color: var(--blue); }
+.event-type.USER_AUDIO { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+
+.log-event-detail {
+  margin-left: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+  display: inline-block;
+  vertical-align: middle;
+}

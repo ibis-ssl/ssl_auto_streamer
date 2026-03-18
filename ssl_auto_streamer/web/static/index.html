@@ -58,6 +58,22 @@
     <!-- Right column -->
     <div id="right-col">
 
+      <!-- User Input -->
+      <div class="panel" id="user-input-panel">
+        <div class="panel-header">ユーザー入力</div>
+        <div class="panel-body">
+          <div class="input-row">
+            <input type="text" id="user-text-input" placeholder="テキストを入力してEnterで送信...">
+            <button class="btn btn-primary" id="send-text-btn">送信</button>
+          </div>
+          <div class="ptt-row">
+            <div id="ptt-indicator" class="ptt-idle">
+              <span id="ptt-label">🎤 スペースキー長押しで音声入力</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- System Status -->
       <div class="panel">
         <div class="panel-header">システム状態</div>
@@ -176,6 +192,7 @@
 </main>
 
 <script src="/static/js/ws-utils.js"></script>
+<script src="/static/js/audio-input.js"></script>
 <script src="/static/js/sounds.js"></script>
 <script src="/static/js/field.js"></script>
 <script src="/static/js/config.js"></script>

@@ -168,6 +168,28 @@ class GeminiLiveApiClient:
     ) -> None:
         self._function_call_handler = handler
 
+    async def send_audio(self, audio_b64: str) -> None:
+        """Send audio via realtime_input (PCM 16-bit mono 16000Hz + trailing silence, base64-encoded)."""
+        if not self._connected or not self._ws:
+            logger.warning("Not connected to Gemini API")
+            return
+
+        message = {
+            "realtime_input": {
+                "media_chunks": [{
+                    "mime_type": "audio/pcm;rate=16000",
+                    "data": audio_b64,
+                }]
+            }
+        }
+
+        try:
+            await self._ws.send(json.dumps(message))
+            logger.debug(f"[send_audio] {len(audio_b64)} chars (b64)")
+        except Exception as e:
+            logger.error(f"Failed to send audio: {e}")
+            self._connected = False
+
     async def send_text(self, text: str) -> None:
         """Send text input to generate audio commentary."""
         if not self._connected or not self._ws:

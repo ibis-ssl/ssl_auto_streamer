@@ -244,12 +244,44 @@ class WebServer:
             state = self._build_state_message()
             await ws.send_str(json.dumps(state, ensure_ascii=False))
 
+            ptt_start: Optional[float] = None
+            ptt_chunks: int = 0
+
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
-                        if data.get("type") == "overlay_control":
+                        msg_type = data.get("type")
+                        if msg_type == "overlay_control":
                             await self._broadcast(msg.data)
+                        elif msg_type == "user_text":
+                            text = data.get("text", "").strip()
+                            if text:
+                                if self._gemini_client.is_connected():
+                                    await self._gemini_client.send_text(text)
+                                    logger.info(f"[user_text] -> Gemini: 「{text}」")
+                                else:
+                                    logger.warning(f"[user_text] Gemini未接続のため送信スキップ: 「{text}」")
+                                self.push_event("USER_TEXT", {"text": text})
+                        elif msg_type == "audio_chunk":
+                            audio_data = data.get("data", "")
+                            if audio_data:
+                                if ptt_start is None:
+                                    ptt_start = time.time()
+                                    ptt_chunks = 0
+                                    logger.info("[PTT] 録音開始")
+                                if self._gemini_client.is_connected():
+                                    await self._gemini_client.send_audio(audio_data)
+                                    ptt_chunks += 1
+                                else:
+                                    logger.warning("[audio_chunk] Gemini未接続")
+                        elif msg_type == "audio_end":
+                            if ptt_start is not None:
+                                duration = time.time() - ptt_start
+                                logger.info(f"[PTT] 完了 — {duration:.1f}秒 / {ptt_chunks}チャンク")
+                                self.push_event("USER_AUDIO", {"duration": round(duration, 1)})
+                                ptt_start = None
+                                ptt_chunks = 0
                     except Exception:
                         pass
                 elif msg.type == aiohttp.WSMsgType.ERROR:

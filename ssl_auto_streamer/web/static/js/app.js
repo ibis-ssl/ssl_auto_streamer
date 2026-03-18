@@ -31,6 +31,66 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   soundBtn.classList.add('active');
 
+  // User text input
+  const textInput = document.getElementById('user-text-input');
+  const sendBtn = document.getElementById('send-text-btn');
+
+  function sendUserText() {
+    const text = textInput.value.trim();
+    if (!text) return;
+    wsClient.send({ type: 'user_text', text });
+    textInput.value = '';
+  }
+
+  textInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendUserText(); }
+  });
+  sendBtn.addEventListener('click', sendUserText);
+
+  // Push-to-Talk
+  let audioCapture = null;
+  let pttStopping = false;
+  const pttIndicator = document.getElementById('ptt-indicator');
+  const pttLabel = document.getElementById('ptt-label');
+
+  function startPTT() {
+    if (audioCapture || pttStopping) return;
+    audioCapture = new AudioInputCapture({
+      onAudioChunk: (b64) => wsClient.send({ type: 'audio_chunk', data: b64 }),
+    });
+    audioCapture.start();
+    pttIndicator.className = 'ptt-recording';
+    pttLabel.textContent = '🔴 録音中...';
+  }
+
+  async function stopPTT() {
+    if (!audioCapture || pttStopping) return;
+    pttStopping = true;
+    pttIndicator.className = 'ptt-processing';
+    pttLabel.textContent = '⏳ 処理中...';
+
+    const capture = audioCapture;
+    audioCapture = null;
+    await capture.stop();  // 1.5秒間無音をストリーミングしてから完了
+
+    wsClient.send({ type: 'audio_end' });
+    pttIndicator.className = 'ptt-idle';
+    pttLabel.textContent = '🎤 スペースキー長押しで音声入力';
+    pttStopping = false;
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space' || e.repeat) return;
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    startPTT();
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') stopPTT();
+  });
+
   // Connect WebSocket
   wsClient = createWSClient({
     onOpen:    () => setWSStatus('connected', '接続中'),
@@ -151,9 +211,15 @@ function renderLogList(listId, items, renderContent) {
 }
 
 function renderEventLog(events) {
-  renderLogList('event-log-list', events,
-    ev => `<span class="event-type ${ev.event_type}">${ev.event_type}</span>`
-  );
+  renderLogList('event-log-list', events, ev => {
+    const label = ev.event_type === 'USER_TEXT' ? '💬 テキスト入力'
+                : ev.event_type === 'USER_AUDIO' ? '🎤 音声入力'
+                : ev.event_type;
+    const text = ev.data && ev.data.text
+      ? `<span class="log-event-detail">${escapeHtml(ev.data.text)}</span>`
+      : '';
+    return `<span class="event-type ${ev.event_type}">${label}</span>${text}`;
+  });
 }
 
 function appendEventLog(ev) {
