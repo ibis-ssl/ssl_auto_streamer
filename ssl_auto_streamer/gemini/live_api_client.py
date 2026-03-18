@@ -59,6 +59,7 @@ class GeminiLiveApiClient:
         ] = None
         self._receive_task: Optional[asyncio.Task] = None
         self._on_disconnect_callback: Optional[Callable[[], None]] = None
+        self._turn_complete_callback: Optional[Callable[[], None]] = None
 
         self._ws_url = (
             f"wss://generativelanguage.googleapis.com/ws/"
@@ -68,6 +69,9 @@ class GeminiLiveApiClient:
 
     def set_disconnect_callback(self, callback: Callable[[], None]) -> None:
         self._on_disconnect_callback = callback
+
+    def set_turn_complete_callback(self, callback: Callable[[], None]) -> None:
+        self._turn_complete_callback = callback
 
     async def connect(self) -> bool:
         """Establish WebSocket connection to Gemini API."""
@@ -179,7 +183,7 @@ class GeminiLiveApiClient:
 
         try:
             await self._ws.send(json.dumps(message))
-            logger.info(f"Sent text: {text[:50]}...")
+            logger.debug(f"Sent text: {text[:50]}...")
         except Exception as e:
             logger.error(f"Failed to send text: {e}")
             self._connected = False
@@ -222,13 +226,15 @@ class GeminiLiveApiClient:
                                 audio_b64 = inline_data.get("data", "")
                                 if audio_b64 and self._audio_callback:
                                     audio_bytes = base64.b64decode(audio_b64)
-                                    logger.info(
+                                    logger.debug(
                                         f"Received audio: {len(audio_bytes)} bytes"
                                     )
                                     self._audio_callback(audio_bytes)
 
             if server_content.get("turnComplete"):
-                logger.info("Turn complete")
+                logger.debug("Turn complete")
+                if self._turn_complete_callback:
+                    self._turn_complete_callback()
 
         if "toolCall" in data:
             tool_call = data["toolCall"]

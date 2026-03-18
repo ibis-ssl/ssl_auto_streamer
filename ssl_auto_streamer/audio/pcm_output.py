@@ -7,7 +7,6 @@
 """PCM Audio Output using PyAudio (matching Google's official sample)."""
 
 import logging
-import queue
 import threading
 from typing import Optional
 
@@ -19,14 +18,17 @@ logger = logging.getLogger(__name__)
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RECEIVE_SAMPLE_RATE = 24000
-CHUNK_SIZE = 1024
+CHUNK_SIZE = 2048   # frames per write (~85ms at 24000Hz) — larger = fewer write calls
+BYTES_PER_FRAME = 2  # paInt16 = 2 bytes/sample
 
 
 class PcmAudioOutput:
     """
     PCM Audio Output for Gemini Live API response.
 
-    Uses PyAudio with persistent stream (matching Google's official sample).
+    Accumulates incoming PCM chunks into a bytearray and feeds PyAudio
+    in fixed-size blocks to avoid choppiness caused by variable chunk sizes.
+    Call flush_buffer() on turn_complete to ensure tail audio is played.
     """
 
     def __init__(
@@ -39,7 +41,10 @@ class PcmAudioOutput:
         self._channels = channels
         self._device_index = None  # TODO: device name to index conversion
 
-        self._audio_queue: queue.Queue = queue.Queue(maxsize=100)
+        self._buffer = bytearray()
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._flush_event = threading.Event()
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._pyaudio: Optional[pyaudio.PyAudio] = None
@@ -52,8 +57,6 @@ class PcmAudioOutput:
 
         try:
             self._pyaudio = pyaudio.PyAudio()
-
-            # Open persistent output stream
             self._stream = self._pyaudio.open(
                 format=FORMAT,
                 channels=self._channels,
@@ -62,6 +65,8 @@ class PcmAudioOutput:
                 frames_per_buffer=CHUNK_SIZE,
             )
 
+            self._stop_event.clear()
+            self._flush_event.clear()
             self._running = True
             self._thread = threading.Thread(target=self._playback_loop, daemon=True)
             self._thread.start()
@@ -86,19 +91,12 @@ class PcmAudioOutput:
             return
 
         self._running = False
-
-        # Clear queue to unblock the thread
-        while not self._audio_queue.empty():
-            try:
-                self._audio_queue.get_nowait()
-            except queue.Empty:
-                break
-
-        # Signal thread to exit
-        self._audio_queue.put(None)
+        self._stop_event.set()
 
         if self._thread:
             self._thread.join(timeout=2.0)
+            if self._thread.is_alive():
+                logger.warning("Playback thread did not terminate in time")
             self._thread = None
 
         if self._stream:
@@ -113,41 +111,43 @@ class PcmAudioOutput:
         logger.info("Audio output stopped")
 
     def play(self, pcm_data: bytes) -> None:
-        """Queue PCM audio data for playback."""
-        if not self._running or not self._stream:
+        """Append PCM audio data to playback buffer."""
+        if not self._running:
             return
+        with self._lock:
+            self._buffer.extend(pcm_data)
 
-        try:
-            self._audio_queue.put_nowait(pcm_data)
-        except queue.Full:
-            # Discard oldest chunk to make room for new audio
-            try:
-                self._audio_queue.get_nowait()
-            except queue.Empty:
-                pass
-            self._audio_queue.put_nowait(pcm_data)
-
-    def _playback_loop(self) -> None:
-        """Background thread for audio playback."""
-        while self._running:
-            try:
-                pcm_data = self._audio_queue.get(timeout=0.5)
-
-                if pcm_data is None:
-                    break
-
-                if self._stream:
-                    self._stream.write(pcm_data)
-
-            except queue.Empty:
-                continue
-            except Exception as e:
-                logger.error(f"Playback error: {e}")
+    def flush_buffer(self) -> None:
+        """Signal playback thread to drain remaining bytes (call on turn_complete)."""
+        self._flush_event.set()
 
     def clear_buffer(self) -> None:
-        """Clear audio buffer (for barge-in support)."""
-        while not self._audio_queue.empty():
-            try:
-                self._audio_queue.get_nowait()
-            except queue.Empty:
-                break
+        """Discard all buffered audio (for barge-in support)."""
+        with self._lock:
+            self._buffer.clear()
+
+    def _playback_loop(self) -> None:
+        """Background thread: drain buffer in fixed-size blocks."""
+        block_bytes = CHUNK_SIZE * BYTES_PER_FRAME
+        while not self._stop_event.is_set():
+            with self._lock:
+                if len(self._buffer) >= block_bytes:
+                    chunk = bytes(self._buffer[:block_bytes])
+                    del self._buffer[:block_bytes]
+                elif self._flush_event.is_set() and self._buffer:
+                    # Drain tail bytes smaller than a full block
+                    chunk = bytes(self._buffer)
+                    self._buffer.clear()
+                    self._flush_event.clear()
+                else:
+                    chunk = None
+
+            if chunk:
+                try:
+                    if self._stream:
+                        self._stream.write(chunk, exception_on_underflow=False)
+                except Exception as e:
+                    logger.error(f"Playback error: {e}")
+            else:
+                # Wait until stop is signalled or next check interval
+                self._stop_event.wait(timeout=0.005)
