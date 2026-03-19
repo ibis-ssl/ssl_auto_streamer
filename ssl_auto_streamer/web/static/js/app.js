@@ -7,12 +7,27 @@ let fieldRenderer = null;
 let wsClient = null;
 let lastState = null;
 const soundManager = new SoundManager();
+let streamingActive = false;
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
   // Tab switching
   document.getElementById('tab-dashboard').addEventListener('click', () => showTab('dashboard'));
   document.getElementById('tab-settings').addEventListener('click', () => showTab('settings'));
+
+  // Streaming control
+  const streamingBtn = document.getElementById('streaming-btn');
+  streamingBtn.addEventListener('click', async () => {
+    streamingBtn.disabled = true;
+    try {
+      const endpoint = streamingActive ? '/api/streaming/stop' : '/api/streaming/start';
+      await fetch(endpoint, { method: 'POST' });
+    } catch (e) {
+      console.error('Streaming control error:', e);
+    } finally {
+      streamingBtn.disabled = false;
+    }
+  });
 
   // Settings form
   document.getElementById('config-apply-btn').addEventListener('click', applyConfig);
@@ -139,9 +154,40 @@ function handleMessage(msg) {
 function updateDashboard(state) {
   updateScoreboard(state.game_state, state.status);
   updateStatusIndicators(state.status);
+  updateStreamingControl(state.status);
   updateField(state);
   renderEventLog(state.event_log || []);
   renderCommentaryHistory(state.commentary_history || []);
+}
+
+function updateStreamingControl(status) {
+  if (!status) return;
+  const active = !!status.streaming;
+  if (active === streamingActive) return;
+  streamingActive = active;
+
+  const btn = document.getElementById('streaming-btn');
+  const label = document.getElementById('streaming-status');
+  if (active) {
+    btn.textContent = '⏹ 実況停止';
+    btn.classList.remove('btn-start');
+    btn.classList.add('btn-stop');
+    label.textContent = '実況中';
+    label.className = 'streaming-status-label active';
+  } else {
+    btn.textContent = '▶ 実況開始';
+    btn.classList.remove('btn-stop');
+    btn.classList.add('btn-start');
+    label.textContent = '停止中';
+    label.className = 'streaming-status-label';
+  }
+
+  // Dim user input panel when not streaming
+  const userInputPanel = document.getElementById('user-input-panel');
+  if (userInputPanel) {
+    userInputPanel.style.opacity = active ? '' : '0.5';
+    userInputPanel.style.pointerEvents = active ? '' : 'none';
+  }
 }
 
 // ===== Scoreboard =====

@@ -115,11 +115,13 @@ class CommentaryApp:
 
         # State
         self._connected = False
+        self._streaming = False
         self._last_event_time: float = time.time()
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 10
         self._next_reconnect_time: float = 0.0
         self._running = False
+        self._pending_tasks: set = set()
 
         # Web server (optional)
         web_cfg = config.get("web", {})
@@ -134,6 +136,9 @@ class CommentaryApp:
                 config_dir=self._config_dir,
                 on_config_update=self._on_web_config_update,
                 get_team_names=lambda: (self._our_team_name, self._their_team_name),
+                on_start_streaming=self._on_web_start_streaming,
+                on_stop_streaming=self._on_web_stop_streaming,
+                get_streaming=lambda: self._streaming,
             )
 
         # Event cooldowns
@@ -211,18 +216,9 @@ class CommentaryApp:
         except Exception as e:
             logger.error(f"Failed to start GC client: {e}")
 
-        # Connect to Gemini
-        success = await self._gemini_client.connect()
-        if success:
-            self._connected = True
-            self._audio_output.start()
-            logger.info("Connected to Gemini API, audio started")
-            await self._send_initial_context()
-            await self._gemini_client.send_text("実況システム起動。RoboCup SSL の実況を開始します。")
-        else:
-            logger.warning("Running without Gemini API connection")
+        logger.info("Waiting for start command from dashboard...")
 
-        # Run main loop tasks
+        # Run main loop tasks (Gemini connection is initiated via dashboard)
         tasks = [
             asyncio.create_task(self._analyst_check_loop()),
             asyncio.create_task(self._reconnect_loop()),
@@ -235,9 +231,48 @@ class CommentaryApp:
         finally:
             await self.shutdown()
 
+    async def start_streaming(self) -> bool:
+        """Start commentary pipeline (connect Gemini, start audio)."""
+        if self._streaming:
+            logger.info("Already streaming")
+            return True
+
+        logger.info("Starting streaming...")
+        success = await self._gemini_client.connect()
+        if success:
+            self._connected = True
+            self._streaming = True
+            self._audio_output.start()
+            logger.info("Connected to Gemini API, audio started")
+            await self._send_initial_context()
+            await self._gemini_client.send_text("実況システム起動。RoboCup SSL の実況を開始します。")
+        else:
+            logger.warning("Failed to connect to Gemini API")
+
+        return success
+
+    async def stop_streaming(self) -> None:
+        """Stop commentary pipeline (disconnect Gemini, stop audio)."""
+        if not self._streaming:
+            logger.info("Already stopped")
+            return
+
+        logger.info("Stopping streaming...")
+        self._streaming = False
+        self._connected = False
+
+        if self._gemini_client.is_connected():
+            await self._gemini_client.disconnect()
+
+        self._audio_output.stop()
+        self._initial_context_sent = False
+        self._reconnect_attempts = 0
+        logger.info("Streaming stopped")
+
     async def shutdown(self) -> None:
         """Graceful shutdown."""
         self._running = False
+        self._streaming = False
         logger.info("Shutting down...")
 
         self._tracker_client.stop()
@@ -331,7 +366,7 @@ class CommentaryApp:
         if self._web_server:
             self._web_server.push_event(event.event_type, event_data)
 
-        if not self._connected:
+        if not self._connected or not self._streaming:
             return
 
         # Check cooldown
@@ -362,7 +397,7 @@ class CommentaryApp:
         while self._running:
             await asyncio.sleep(1.0)
 
-            if not self._connected:
+            if not self._connected or not self._streaming:
                 continue
 
             silence_duration = time.time() - self._last_event_time
@@ -383,6 +418,9 @@ class CommentaryApp:
         while self._running:
             await asyncio.sleep(5.0)
 
+            if not self._streaming:
+                continue
+
             if self._connected and not self._gemini_client.is_connected():
                 logger.warning("Gemini connection lost")
                 self._connected = False
@@ -393,6 +431,7 @@ class CommentaryApp:
 
             if self._reconnect_attempts >= self._max_reconnect_attempts:
                 logger.error("Max reconnect attempts reached. Giving up.")
+                self._streaming = False
                 break
 
             current_time = time.time()
@@ -445,6 +484,20 @@ class CommentaryApp:
         logger.info("Sending initial context to Gemini")
         await self._gemini_client.send_text(f"[SYSTEM CONTEXT]\n{context}")
         self._initial_context_sent = True
+
+    def _fire_and_forget(self, coro: Any) -> None:
+        """Schedule a coroutine and keep a strong reference to prevent GC."""
+        task = asyncio.create_task(coro)
+        self._pending_tasks.add(task)
+        task.add_done_callback(self._pending_tasks.discard)
+
+    def _on_web_start_streaming(self) -> None:
+        """Called from Web UI to start the commentary pipeline."""
+        self._fire_and_forget(self.start_streaming())
+
+    def _on_web_stop_streaming(self) -> None:
+        """Called from Web UI to stop the commentary pipeline."""
+        self._fire_and_forget(self.stop_streaming())
 
     def _on_web_config_update(self, config: Dict[str, Any]) -> None:
         """Apply runtime-reflectable config changes from Web UI."""

@@ -41,6 +41,9 @@ class WebServer:
         config_dir: Path,
         on_config_update: Optional[Callable[[Dict[str, Any]], None]] = None,
         get_team_names: Optional[Callable[[], tuple]] = None,
+        on_start_streaming: Optional[Callable[[], None]] = None,
+        on_stop_streaming: Optional[Callable[[], None]] = None,
+        get_streaming: Optional[Callable[[], bool]] = None,
     ):
         self._host = host
         self._port = port
@@ -50,6 +53,9 @@ class WebServer:
         self._config_dir = config_dir
         self._on_config_update = on_config_update
         self._get_team_names = get_team_names
+        self._on_start_streaming = on_start_streaming
+        self._on_stop_streaming = on_stop_streaming
+        self._get_streaming = get_streaming
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=10)
@@ -75,6 +81,8 @@ class WebServer:
         self._app.router.add_post("/api/config", self._handle_post_config)
         self._app.router.add_get("/api/status", self._handle_get_status)
         self._app.router.add_get("/api/team-profiles", self._handle_get_team_profiles)
+        self._app.router.add_post("/api/streaming/start", self._handle_streaming_start)
+        self._app.router.add_post("/api/streaming/stop", self._handle_streaming_stop)
         if self._static_dir.exists():
             self._app.router.add_static("/static", self._static_dir)
 
@@ -148,10 +156,12 @@ class WebServer:
     def _build_status_dict(self) -> Dict[str, Any]:
         """Build system status dict (used by both broadcast and REST API)."""
         now = time.time()
+        streaming = self._get_streaming() if self._get_streaming else False
         return {
             "gemini_connected": self._gemini_client.is_connected(),
             "tracker_receiving": (now - self._tracker_last_seen) < _RECEIVER_TIMEOUT_SEC,
             "gc_receiving": (now - self._gc_last_seen) < _RECEIVER_TIMEOUT_SEC,
+            "streaming": streaming,
         }
 
     def _build_state_message(self) -> Dict[str, Any]:
@@ -355,6 +365,18 @@ class WebServer:
             logger.warning(f"Failed to save config: {e}")
 
         return web.json_response({"success": True, "restart_required": restart_required})
+
+    async def _handle_streaming_start(self, request: web.Request) -> web.Response:
+        """Start the commentary pipeline."""
+        if self._on_start_streaming:
+            self._on_start_streaming()
+        return web.json_response({"success": True})
+
+    async def _handle_streaming_stop(self, request: web.Request) -> web.Response:
+        """Stop the commentary pipeline."""
+        if self._on_stop_streaming:
+            self._on_stop_streaming()
+        return web.json_response({"success": True})
 
     async def _handle_get_status(self, request: web.Request) -> web.Response:
         """Return system status."""

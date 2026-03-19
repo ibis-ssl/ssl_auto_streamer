@@ -383,6 +383,27 @@ input:focus, select:focus { border-color: var(--blue); }
 .btn:hover { opacity: 0.85; }
 .btn-primary { background: var(--blue); color: #fff; }
 .btn-secondary { background: var(--border); color: var(--text); }
+.btn-start { background: var(--green); color: #fff; font-size: 15px; padding: 10px 28px; font-weight: 600; }
+.btn-stop  { background: var(--red);   color: #fff; font-size: 15px; padding: 10px 28px; font-weight: 600; }
+
+/* ===== Streaming Control ===== */
+#streaming-control {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  grid-column: 1 / -1;
+}
+
+.streaming-status-label {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.streaming-status-label.active {
+  color: var(--green);
+  font-weight: 600;
+}
 
 #apply-result {
   font-size: 12px;
