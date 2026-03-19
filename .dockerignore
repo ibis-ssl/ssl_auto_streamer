@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.git/
+.github/
+.idea/
+.vscode/
+proto/
+*.swp
+.DS_Store
+.python-version
