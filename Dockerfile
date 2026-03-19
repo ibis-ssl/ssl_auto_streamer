@@ -5,7 +5,7 @@ WORKDIR /app
 
 # PyAudio のビルドに portaudio19-dev が必要
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    portaudio19-dev gcc \
+    portaudio19-dev gcc linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 依存関係を先にインストール (キャッシュ活用)
