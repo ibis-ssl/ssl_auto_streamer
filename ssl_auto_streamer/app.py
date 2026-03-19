@@ -245,7 +245,15 @@ class CommentaryApp:
             self._audio_output.start()
             logger.info("Connected to Gemini API, audio started")
             await self._send_initial_context()
-            await self._gemini_client.send_text("実況システム起動。RoboCup SSL の実況を開始します。")
+            startup_msg = json.dumps({
+                "mode": "startup",
+                "instruction": "試合前の挨拶として、対戦カード（両チーム名）と簡単な見どころを述べてください。「システム起動」などのメタ発言は禁止。",
+                "teams": {
+                    "ours": get_team_reading_from_data(self._our_team_name, self._team_profiles),
+                    "theirs": get_team_reading_from_data(self._their_team_name, self._team_profiles) if self._their_team_name else "未定",
+                },
+            }, ensure_ascii=False)
+            await self._gemini_client.send_text(startup_msg)
         else:
             logger.warning("Failed to connect to Gemini API")
 
@@ -521,6 +529,7 @@ class CommentaryApp:
 
         update = {
             "type": "team_update",
+            "instruction": "チーム情報が更新されました。以降の実況ではこのチーム名（reading）を使用してください。新しい対戦相手の特徴を簡潔に紹介してください。",
             "our_team": {
                 "name": get_team_reading_from_data(
                     self._our_team_name, self._team_profiles

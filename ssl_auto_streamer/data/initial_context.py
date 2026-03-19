@@ -58,7 +58,7 @@ def generate_initial_context(
             },
             "key_fouls": [
                 {"name": name, **details}
-                for name, details in list(ssl_rules["fouls"].items())[:8]
+                for name, details in ssl_rules["fouls"].items()
             ],
             "set_plays": ssl_rules["set_plays"],
         },
@@ -81,12 +81,22 @@ def generate_initial_context(
             "note": "相手チーム情報は試合開始時に更新されます",
         }
 
-    our_team_reading = get_team_reading_from_data(our_team_name, team_profiles)
-    context["commentary_hints"] = {
-        "our_team_focus": f"{our_team_reading}の特徴を活かした実況を心がけてください",
-        "opponent_analysis": "相手チームの特徴も適宜言及してください",
-        "rule_awareness": "ファール発生時は該当ルールを簡潔に説明してください",
-        "style_note": "簡潔で熱のこもった実況を続けてください",
+    our_profile = get_team_profile_from_data(our_team_name, team_profiles)
+    their_profile = (
+        get_team_profile_from_data(their_team_name, team_profiles)
+        if their_team_name
+        else {}
+    )
+    our_style = our_profile.get("style", "不明")
+    their_style = their_profile.get("style", "不明") if their_team_name else "未定"
+    if their_team_name and our_style != "不明" and their_style != "不明":
+        narrative = f"{our_style} vs {their_style}の対戦。スタイルの違いに注目"
+    else:
+        narrative = f"{get_team_reading_from_data(our_team_name, team_profiles)}の特徴を活かした戦い方に注目"
+    context["matchup"] = {
+        "our_style": our_style,
+        "their_style": their_style,
+        "narrative_angle": narrative,
     }
 
     return json.dumps(context, ensure_ascii=False, indent=2)
