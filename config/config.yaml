@@ -2,6 +2,7 @@ audio:
   device: ''
 commentary:
   analyst_silence_threshold: 5
+  interrupt_priority_threshold: 2
   mode: reflex_analyst
   writer_update_rate: 1
 gemini:

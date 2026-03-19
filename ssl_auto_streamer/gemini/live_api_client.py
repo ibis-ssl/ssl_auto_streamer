@@ -53,6 +53,7 @@ class GeminiLiveApiClient:
 
         self._ws: Optional[WebSocketClientProtocol] = None
         self._connected = False
+        self._is_generating = False
         self._audio_callback: Optional[Callable[[bytes], None]] = None
         self._function_call_handler: Optional[
             Callable[[str, Dict[str, Any]], Dict[str, Any]]
@@ -131,6 +132,7 @@ class GeminiLiveApiClient:
 
             if "setupComplete" in response_data:
                 self._connected = True
+                self._is_generating = False
                 logger.info("Connected to Gemini Live API")
                 self._receive_task = asyncio.create_task(self._receive_loop())
                 return True
@@ -155,10 +157,16 @@ class GeminiLiveApiClient:
             await self._ws.close()
 
         self._connected = False
+        self._is_generating = False
         logger.info("Disconnected from Gemini Live API")
 
     def is_connected(self) -> bool:
         return self._connected
+
+    @property
+    def is_generating(self) -> bool:
+        """Gemini が現在音声を生成中かどうか（バージイン判定用）。"""
+        return self._is_generating
 
     def set_audio_callback(self, callback: Callable[[bytes], None]) -> None:
         self._audio_callback = callback
@@ -239,6 +247,7 @@ class GeminiLiveApiClient:
             server_content = data["serverContent"]
 
             if "modelTurn" in server_content:
+                self._is_generating = True
                 model_turn = server_content["modelTurn"]
                 if "parts" in model_turn:
                     for part in model_turn["parts"]:
@@ -255,6 +264,7 @@ class GeminiLiveApiClient:
 
             if server_content.get("turnComplete"):
                 logger.debug("Turn complete")
+                self._is_generating = False
                 if self._turn_complete_callback:
                     self._turn_complete_callback()
 

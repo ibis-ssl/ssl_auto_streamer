@@ -112,6 +112,7 @@ class CommentaryApp:
         # Commentary settings
         self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
         self._writer_update_rate = commentary_cfg.get("writer_update_rate", 1.0)
+        self._interrupt_priority_threshold = commentary_cfg.get("interrupt_priority_threshold", 2)
 
         # State
         self._connected = False
@@ -387,10 +388,19 @@ class CommentaryApp:
             return
 
         # Generate reflex commentary
+        prev_mode = self._reader.get_mode()
         self._reader.set_mode(CommentaryMode.REFLEX)
         request = self._reader.generate_reflex(event.event_type, event_data)
 
         if request.priority >= 1:
+            # バージイン判定: 高優先度イベントまたはアナリストモード中なら音声バッファをクリア
+            if self._gemini_client.is_generating and (
+                request.priority >= self._interrupt_priority_threshold
+                or prev_mode == CommentaryMode.ANALYST
+            ):
+                logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
+                self._audio_output.clear_buffer()
+
             json_payload = self._reader.to_gemini_json(request)
             logger.info(f"Sending reflex commentary for {event.event_type}")
             asyncio.create_task(self._gemini_client.send_text(json_payload))
@@ -519,6 +529,9 @@ class CommentaryApp:
         )
         self._writer_update_rate = commentary_cfg.get(
             "writer_update_rate", self._writer_update_rate
+        )
+        self._interrupt_priority_threshold = commentary_cfg.get(
+            "interrupt_priority_threshold", self._interrupt_priority_threshold
         )
         logger.info("Config updated from Web UI")
 
