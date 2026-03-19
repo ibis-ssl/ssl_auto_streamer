@@ -21,7 +21,7 @@ from ssl_auto_streamer.data import (
 )
 from ssl_auto_streamer.statler import WorldModelWriter, WorldModelReader
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
-from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler
+from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
 from ssl_auto_streamer.audio import PcmAudioOutput
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
@@ -47,6 +47,7 @@ class CommentaryApp:
         gemini_cfg = config.get("gemini", {})
         audio_cfg = config.get("audio", {})
         commentary_cfg = config.get("commentary", {})
+        analysis_agent_cfg = config.get("analysis_agent", {})
 
         self._our_team_is_blue = ssl_cfg.get("our_team_color", "blue") == "blue"
         self._our_team_name: str = ssl_cfg.get("our_team_name", "ibis")
@@ -71,6 +72,24 @@ class CommentaryApp:
         self._reader = WorldModelReader(self._writer)
         self._function_handler = FunctionHandler(self._writer)
 
+        # Initialize AnalysisAgent
+        api_key_for_analysis = (
+            analysis_agent_cfg.get("api_key")
+            or gemini_cfg.get("api_key")
+            or os.environ.get("GEMINI_API_KEY", "")
+        )
+        # request_analysis 自身を除外してループ再帰を防ぐ
+        analysis_tool_declarations = [
+            d for d in tools_config if d.get("name") != "request_analysis"
+        ]
+        self._analysis_agent = AnalysisAgent(
+            writer=self._writer,
+            config={**analysis_agent_cfg, "api_key": api_key_for_analysis},
+            tool_declarations=analysis_tool_declarations,
+            tool_executor=self._function_handler.handle,
+        )
+        self._function_handler.set_analysis_agent(self._analysis_agent)
+
         # Initialize event detector
         self._event_detector = EventDetector(self._our_team_is_blue)
 
@@ -85,7 +104,7 @@ class CommentaryApp:
         )
         self._gemini_client = GeminiLiveApiClient(gemini_config)
         self._gemini_client.set_audio_callback(self._on_audio_received)
-        self._gemini_client.set_function_call_handler(self._function_handler.handle)
+        self._gemini_client.set_function_call_handler(self._function_handler.handle_async)
         self._gemini_client.set_disconnect_callback(self._on_gemini_disconnected)
         self._gemini_client.set_turn_complete_callback(self._on_turn_complete)
 
@@ -197,6 +216,9 @@ class CommentaryApp:
 
         loop = asyncio.get_event_loop()
 
+        # Start AnalysisAgent
+        await self._analysis_agent.start()
+
         # Start web server
         if self._web_server:
             try:
@@ -291,6 +313,7 @@ class CommentaryApp:
             await self._gemini_client.disconnect()
 
         self._audio_output.stop()
+        await self._analysis_agent.close()
 
         if self._web_server:
             await self._web_server.stop()

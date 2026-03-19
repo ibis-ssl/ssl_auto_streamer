@@ -7,6 +7,7 @@
 """Gemini Multimodal Live API Client for real-time audio commentary."""
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -172,7 +173,7 @@ class GeminiLiveApiClient:
         self._audio_callback = callback
 
     def set_function_call_handler(
-        self, handler: Callable[[str, Dict[str, Any]], Dict[str, Any]]
+        self, handler: Callable[..., Any]
     ) -> None:
         self._function_call_handler = handler
 
@@ -283,17 +284,7 @@ class GeminiLiveApiClient:
         logger.info(f"Function call: {fc_name}({fc_args})")
 
         if self._function_call_handler:
-            try:
-                result = self._function_call_handler(fc_name, fc_args)
-                asyncio.create_task(
-                    self._send_function_response(fc_id, fc_name, result)
-                )
-            except Exception as e:
-                logger.error(f"Function call error: {fc_name} -> {e}")
-                error_result = {"error": str(e)}
-                asyncio.create_task(
-                    self._send_function_response(fc_id, fc_name, error_result)
-                )
+            asyncio.create_task(self._execute_function_call(fc_id, fc_name, fc_args))
         else:
             logger.warning(f"No handler for function call: {fc_name}")
             asyncio.create_task(
@@ -301,6 +292,19 @@ class GeminiLiveApiClient:
                     fc_id, fc_name, {"error": "No function handler registered"}
                 )
             )
+
+    async def _execute_function_call(
+        self, fc_id: str, fc_name: str, fc_args: Dict[str, Any]
+    ) -> None:
+        """非同期でファンクションコールを実行して結果を返送する。"""
+        try:
+            result = self._function_call_handler(fc_name, fc_args)
+            if inspect.isawaitable(result):
+                result = await result
+            await self._send_function_response(fc_id, fc_name, result)
+        except Exception as e:
+            logger.error(f"Function call error: {fc_name} -> {e}")
+            await self._send_function_response(fc_id, fc_name, {"error": str(e)})
 
     async def _send_function_response(
         self, fc_id: str, fc_name: str, result: Dict[str, Any]

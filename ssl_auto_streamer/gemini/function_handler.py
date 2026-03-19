@@ -7,9 +7,12 @@
 """Function Call Handler for Gemini Live API."""
 
 import logging
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ssl_auto_streamer.statler import WorldModelWriter
+
+if TYPE_CHECKING:
+    from ssl_auto_streamer.gemini.analysis_agent import AnalysisAgent
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +22,21 @@ class FunctionHandler:
 
     def __init__(self, writer: WorldModelWriter):
         self._writer = writer
+        self._analysis_agent: Optional["AnalysisAgent"] = None
+
+    def set_analysis_agent(self, agent: "AnalysisAgent") -> None:
+        """AnalysisAgent を登録する。"""
+        self._analysis_agent = agent
+
+    async def handle_async(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        """非同期関数呼び出しをハンドルする（request_analysis 対応）。"""
+        if name == "request_analysis":
+            if self._analysis_agent is None:
+                return {"error": "AnalysisAgent is not configured"}
+            analysis_type = args.get("analysis_type", "tactical")
+            context = args.get("context")
+            return await self._analysis_agent.analyze(analysis_type, context)
+        return self.handle(name, args)
 
     def handle(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
         """Handle a function call from Gemini."""

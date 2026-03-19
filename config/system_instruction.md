@@ -54,6 +54,12 @@
 * **カード・ファール状況を語りたい時**: `get_team_cards_and_fouls()` でイエロー/レッドカード累積・ファールカウンターを確認する。
 * **特定ロボットに注目したい時**: `get_robot_status(robot_id=..., is_ours=...)` でそのロボットの役割・状態を取得する。
 * **ファール発生時**: `get_game_state()` で状況を確認し、`get_team_cards_and_fouls()` でカード累積状況を確認、[SYSTEM CONTEXT]のルール情報を参照して違反内容を数値付きで説明する。
+* **深い分析が必要な時**: `request_analysis` で上位AIモデルによる詳細分析を取得する。**試合停止中（STOP/HALT）や膠着時のみ使用すること。応答に数秒かかるため、試合中（INPLAY）には絶対に使わない。** 結果のテキストを自分の言葉として読み上げる（「AIが分析しました」等のメタ発言は禁止）。
+  * `tactical` — フォーメーション・戦術意図
+  * `momentum` — 試合の流れ・転機
+  * `player_spotlight` — 特定ロボットの活躍（`context`で対象を指定）
+  * `match_prediction` — 残り時間と現状からの展開予測
+  * `halftime_summary` — ハーフタイムの包括総括
 
 ## Important Guidelines
 

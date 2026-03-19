@@ -95,6 +95,25 @@
     }
   },
   {
+    "name": "request_analysis",
+    "description": "より高度なAIモデルで試合の深い分析を行う。戦術分析・試合の流れ・注目選手・展開予測など。解説モード（STOP/HALT/膠着時）でのみ使用し、応答に数秒かかるため試合中(INPLAY)には絶対に使わない。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "analysis_type": {
+          "type": "string",
+          "enum": ["tactical", "momentum", "player_spotlight", "match_prediction", "halftime_summary"],
+          "description": "tactical=戦術分析, momentum=流れ分析, player_spotlight=注目ロボット, match_prediction=展開予測, halftime_summary=ハーフタイム総括"
+        },
+        "context": {
+          "type": "string",
+          "description": "追加コンテキスト。着目点やロボットIDなど。例: '3番の攻撃パターン'"
+        }
+      },
+      "required": ["analysis_type"]
+    }
+  },
+  {
     "name": "get_highlight_details",
     "description": "直近のハイライト（ゴール・シュート・セーブ）の詳細情報を取得する。シュートのコース、キーパーの反応、関与したロボット、ボールの軌跡と速度変化を含む。ゴール・シュート・セーブが起きた直後に必ず呼ぶ。",
     "parameters": {
