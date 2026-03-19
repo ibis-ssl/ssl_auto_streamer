@@ -131,6 +131,33 @@ class WorldModelWriter:
         self._match_start_time: Optional[float] = None
         self._stage_time_left_us: int = 0  # microseconds from Referee
 
+        # Card and foul tracking (updated from Referee messages)
+        self._our_yellow_cards: int = 0
+        self._our_red_cards: int = 0
+        self._our_foul_counter: int = 0
+        self._our_yellow_card_times: List[float] = []
+        self._our_max_allowed_bots: int = 11
+        self._their_yellow_cards: int = 0
+        self._their_red_cards: int = 0
+        self._their_foul_counter: int = 0
+        self._their_yellow_card_times: List[float] = []
+        self._their_max_allowed_bots: int = 11
+
+        # Match statistics (updated via add_event)
+        _zero_stats: Dict[str, int] = {
+            "shots": 0, "goals": 0, "saves": 0, "passes": 0, "fouls": 0
+        }
+        self._stats: Dict[str, Dict[str, int]] = {
+            "ours": dict(_zero_stats),
+            "theirs": dict(_zero_stats),
+        }
+        self._possession_time_ours: float = 0.0
+        self._possession_time_theirs: float = 0.0
+        self._last_possession_update_time: Optional[float] = None
+
+        # Detailed event history
+        self._event_history: deque[dict] = deque(maxlen=50)
+
     def update(
         self,
         play_situation: int,
@@ -185,23 +212,39 @@ class WorldModelWriter:
                 else:
                     self._robot_snapshots_theirs[robot_id] = snapshot
 
-            self._ball_possession_team = self._determine_possession()
+            # Update possession time tracking
+            new_possession = self._determine_possession()
+            if self._last_possession_update_time is not None:
+                dt = current_time - self._last_possession_update_time
+                if self._ball_possession_team == "ours":
+                    self._possession_time_ours += dt
+                elif self._ball_possession_team == "theirs":
+                    self._possession_time_theirs += dt
+            self._last_possession_update_time = current_time
+            self._ball_possession_team = new_possession
             self._update_momentum()
 
     def update_from_referee(self, referee: Any, our_team_is_blue: bool) -> None:
         """Update game state from Referee protobuf message."""
         with self._lock:
-            # Update scores
+            # Update scores and card/foul info
             if our_team_is_blue:
                 self._context.our_score = referee.blue.score
                 self._context.their_score = referee.yellow.score
                 self._our_goalie_id = referee.blue.goalkeeper
                 self._their_goalie_id = referee.yellow.goalkeeper
+                our_team = referee.blue
+                their_team = referee.yellow
             else:
                 self._context.our_score = referee.yellow.score
                 self._context.their_score = referee.blue.score
                 self._our_goalie_id = referee.yellow.goalkeeper
                 self._their_goalie_id = referee.blue.goalkeeper
+                our_team = referee.yellow
+                their_team = referee.blue
+
+            self._apply_team_card_info(our_team, is_ours=True)
+            self._apply_team_card_info(their_team, is_ours=False)
 
             # Update play situation name from command
             command_value = referee.command
@@ -212,7 +255,6 @@ class WorldModelWriter:
             # Update elapsed time from stage_time_left
             self._stage_time_left_us = referee.stage_time_left
             # Stage determines half duration (300s = 5 min per half)
-            stage_value = referee.stage
             stage_duration_us = 300 * 1_000_000  # 5 min in microseconds
             elapsed_us = stage_duration_us - self._stage_time_left_us
             self._context.elapsed_seconds = max(0.0, elapsed_us / 1_000_000.0)
@@ -221,6 +263,7 @@ class WorldModelWriter:
 
     def add_event(self, event_type: str, data: Dict[str, Any]) -> None:
         """Add a new event to recent history."""
+        timestamp = time.time()
         with self._lock:
             self._context.recent_events.append(event_type)
             if len(self._context.recent_events) > self.max_recent_events:
@@ -238,6 +281,27 @@ class WorldModelWriter:
                 if len(self._highlights) > self.max_highlights:
                     self._highlights.sort(key=lambda h: h.score, reverse=True)
                     self._highlights.pop()
+
+            # Update match statistics
+            team_key = "ours" if data.get("primary_robot", {}).get("is_ours", True) else "theirs"
+            stats = self._stats[team_key]
+            if event_type in ("SHOT", "FAST_SHOT"):
+                stats["shots"] += 1
+            elif event_type == "GOAL":
+                stats["goals"] += 1
+            elif event_type == "SAVE":
+                stats["saves"] += 1
+            elif event_type == "PASS":
+                stats["passes"] += 1
+            elif event_type == "FOUL":
+                stats["fouls"] += 1
+
+            # Store to detailed event history
+            self._event_history.append({
+                "type": event_type,
+                "timestamp": timestamp,
+                "data": data,
+            })
 
     def get_context(self) -> GameContext:
         """Get current game context."""
@@ -411,15 +475,62 @@ class WorldModelWriter:
             result["ball_possession"] = self._ball_possession_team
             return result
 
-    def get_formation_analysis_data(self, focus: str = "both") -> Dict[str, Any]:
+    def get_team_cards_and_fouls_data(self) -> Dict[str, Any]:
         with self._lock:
-            result: Dict[str, Any] = {}
-            if focus in ("offensive", "both"):
-                result["ours"] = self._analyze_team_formation(True)
-            if focus in ("defensive", "both"):
-                result["theirs"] = self._analyze_team_formation(False)
-            result["tactical_situation"] = self._analyze_tactical_situation()
-            return result
+            return {
+                "ours": {
+                    "yellow_cards": self._our_yellow_cards,
+                    "yellow_card_times_sec": list(self._our_yellow_card_times),
+                    "red_cards": self._our_red_cards,
+                    "foul_counter": self._our_foul_counter,
+                    "max_allowed_bots": self._our_max_allowed_bots,
+                },
+                "theirs": {
+                    "yellow_cards": self._their_yellow_cards,
+                    "yellow_card_times_sec": list(self._their_yellow_card_times),
+                    "red_cards": self._their_red_cards,
+                    "foul_counter": self._their_foul_counter,
+                    "max_allowed_bots": self._their_max_allowed_bots,
+                },
+            }
+
+    def get_match_stats_data(self) -> Dict[str, Any]:
+        with self._lock:
+            total_possession = self._possession_time_ours + self._possession_time_theirs
+            our_pct = round(
+                self._possession_time_ours / total_possession * 100.0, 1
+            ) if total_possession > 0 else 50.0
+            return {
+                "ours": self._build_team_stats_dict("ours", our_pct),
+                "theirs": self._build_team_stats_dict("theirs", round(100.0 - our_pct, 1)),
+                "total_events": len(self._event_history),
+            }
+
+    def get_event_history_data(self, count: int = 5) -> Dict[str, Any]:
+        count = min(count, 10)
+        with self._lock:
+            current_time = time.time()
+            recent = list(self._event_history)[-count:]
+            events = []
+            for entry in reversed(recent):
+                data = entry["data"]
+                robot_info = data.get("primary_robot")
+                if robot_info:
+                    r_id = robot_info.get("id", "?")
+                    team = "自チーム" if robot_info.get("is_ours", True) else "相手チーム"
+                    description = f"{team}{r_id}番が{entry['type']}"
+                else:
+                    description = entry["type"]
+                events.append({
+                    "type": entry["type"],
+                    "time_ago_sec": round(current_time - entry["timestamp"], 1),
+                    "description": description,
+                    "data": dict(data),
+                })
+            return {
+                "events": events,
+                "total_recorded": len(self._event_history),
+            }
 
     def get_highlight_details_data(
         self, highlight_type: str = "any", count: int = 1
@@ -476,6 +587,33 @@ class WorldModelWriter:
             }
 
     # ========== Helper Methods ==========
+
+    def _apply_team_card_info(self, team_proto: Any, is_ours: bool) -> None:
+        """Extract card/foul fields from a Referee TeamInfo proto and store them."""
+        if is_ours:
+            self._our_yellow_cards = team_proto.yellow_cards
+            self._our_red_cards = team_proto.red_cards
+            self._our_foul_counter = team_proto.foul_counter
+            self._our_max_allowed_bots = team_proto.max_allowed_bots
+            self._our_yellow_card_times = [t.seconds for t in team_proto.yellow_card_times]
+        else:
+            self._their_yellow_cards = team_proto.yellow_cards
+            self._their_red_cards = team_proto.red_cards
+            self._their_foul_counter = team_proto.foul_counter
+            self._their_max_allowed_bots = team_proto.max_allowed_bots
+            self._their_yellow_card_times = [t.seconds for t in team_proto.yellow_card_times]
+
+    def _build_team_stats_dict(self, team_key: str, possession_pct: float) -> Dict[str, Any]:
+        """Build the stats sub-dict for get_match_stats_data()."""
+        s = self._stats[team_key]
+        return {
+            "shots": s["shots"],
+            "goals": s["goals"],
+            "saves": s["saves"],
+            "passes": s["passes"],
+            "fouls_committed": s["fouls"],
+            "ball_possession_percent": possession_pct,
+        }
 
     def _build_robot_snapshot_from_tracked(
         self, robot: Any, is_ours: bool
@@ -672,133 +810,6 @@ class WorldModelWriter:
             return f"{d}-{m}-{a}（攻撃的布陣）"
         else:
             return f"{d}-{m}-{a}（バランス型）"
-
-    def _analyze_team_formation(self, is_ours: bool) -> Dict[str, Any]:
-        snapshots = (
-            self._robot_snapshots_ours if is_ours else self._robot_snapshots_theirs
-        )
-        goalie_id = self._our_goalie_id if is_ours else self._their_goalie_id
-        active_robots = [r for r in snapshots.values() if r.is_available]
-
-        formation = self._determine_formation(active_robots, goalie_id)
-        pattern = self._determine_pattern(active_robots)
-        pressure_zone = self._determine_pressure_zone(active_robots, is_ours)
-        robots_near_ball = self._count_robots_near_ball(active_robots, threshold=1.5)
-
-        goalkeeper = snapshots.get(goalie_id)
-        gk_info = {
-            "x": round(goalkeeper.position[0], 2) if goalkeeper else 0.0,
-            "y": round(goalkeeper.position[1], 2) if goalkeeper else 0.0,
-            "advanced": goalkeeper.position[0] > -4.5 if (is_ours and goalkeeper) else False,
-        }
-
-        return {
-            "formation": formation,
-            "pattern": pattern,
-            "pressure_zone": pressure_zone,
-            "robots_near_ball": robots_near_ball,
-            "goalkeeper_position": gk_info,
-        }
-
-    def _determine_pattern(self, robots: List[RobotSnapshot]) -> str:
-        if len(robots) < 2:
-            return "unknown"
-        positions = [(r.position[0], r.position[1]) for r in robots]
-        total_dist = 0.0
-        count = 0
-        for i, p1 in enumerate(positions):
-            for p2 in positions[i + 1:]:
-                dist = math.hypot(p1[0] - p2[0], p1[1] - p2[1])
-                total_dist += dist
-                count += 1
-        avg_dist = total_dist / count if count > 0 else 0
-        if avg_dist < 2.0:
-            return "compact"
-        elif avg_dist > 4.0:
-            return "spread"
-        else:
-            return "balanced"
-
-    def _determine_pressure_zone(
-        self, robots: List[RobotSnapshot], is_ours: bool
-    ) -> str:
-        if not robots:
-            return "unknown"
-        avg_x = sum(r.position[0] for r in robots) / len(robots)
-        if is_ours:
-            if avg_x > 2.0:
-                return "opponent_half"
-            elif avg_x < -2.0:
-                return "own_half"
-            else:
-                return "midfield"
-        else:
-            if avg_x < -2.0:
-                return "opponent_half"
-            elif avg_x > 2.0:
-                return "own_half"
-            else:
-                return "midfield"
-
-    def _count_robots_near_ball(
-        self, robots: List[RobotSnapshot], threshold: float
-    ) -> int:
-        ball_pos = self._current_ball_pos[:2]
-        count = 0
-        for robot in robots:
-            dist = math.hypot(
-                robot.position[0] - ball_pos[0], robot.position[1] - ball_pos[1]
-            )
-            if dist < threshold:
-                count += 1
-        return count
-
-    def _analyze_tactical_situation(self) -> Dict[str, Any]:
-        ball_x, ball_y = self._current_ball_pos[0], self._current_ball_pos[1]
-
-        if ball_x < -3.0:
-            x_zone = "own_deep"
-        elif ball_x < 0:
-            x_zone = "own_half"
-        elif ball_x < 3.0:
-            x_zone = "opponent_half"
-        else:
-            x_zone = "opponent_deep"
-
-        if ball_y > 1.5:
-            y_zone = "left"
-        elif ball_y < -1.5:
-            y_zone = "right"
-        else:
-            y_zone = "center"
-
-        ball_zone = f"{x_zone}_{y_zone}"
-
-        our_near = self._count_robots_near_ball(
-            list(self._robot_snapshots_ours.values()), 2.0
-        )
-        their_near = self._count_robots_near_ball(
-            list(self._robot_snapshots_theirs.values()), 2.0
-        )
-
-        ball_speed = math.hypot(self._current_ball_vel[0], self._current_ball_vel[1])
-        if ball_speed > 4.0:
-            attack_style = "counter"
-        elif self._ball_possession_team == "ours":
-            attack_style = "possession"
-        else:
-            attack_style = "transition"
-
-        return {
-            "ball_zone": ball_zone,
-            "numerical_advantage": {
-                "zone": "ball_vicinity",
-                "ours": our_near,
-                "theirs": their_near,
-            },
-            "attack_style": attack_style,
-            "defense_style": "zonal",
-        }
 
     def _build_highlight_detail(
         self, highlight: HighlightEvent, now: datetime

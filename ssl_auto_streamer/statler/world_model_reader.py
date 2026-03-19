@@ -230,15 +230,15 @@ class WorldModelReader:
             ],
             "game_summary": [
                 {"function": "get_game_state", "purpose": "スコアと試合状況"},
-                {"function": "get_formation_analysis", "purpose": "両チームの布陣"},
+                {"function": "get_match_stats", "purpose": "試合全体の統計サマリー"},
                 {"function": "get_highlight_details", "args": {"highlight_type": "any", "count": 3}, "purpose": "主要ハイライト"},
             ],
             "team_introduction": [
                 {"function": "get_all_robots_summary", "purpose": "出場ロボット一覧"},
-                {"function": "get_formation_analysis", "purpose": "開始時の布陣"},
+                {"function": "get_team_cards_and_fouls", "purpose": "カード・ファール状況"},
             ],
             "tactical_analysis": [
-                {"function": "get_formation_analysis", "purpose": "布陣分析"},
+                {"function": "get_event_history", "args": {"count": 5}, "purpose": "直近イベントの流れ"},
                 {"function": "get_all_robots_summary", "purpose": "全ロボット概要"},
                 {"function": "get_game_state", "purpose": "試合の流れ"},
             ],

@@ -27,7 +27,9 @@ class FunctionHandler:
             "get_ball_trajectory": self._handle_get_ball_trajectory,
             "get_robot_status": self._handle_get_robot_status,
             "get_all_robots_summary": self._handle_get_all_robots_summary,
-            "get_formation_analysis": self._handle_get_formation_analysis,
+            "get_team_cards_and_fouls": self._handle_get_team_cards_and_fouls,
+            "get_match_stats": self._handle_get_match_stats,
+            "get_event_history": self._handle_get_event_history,
             "get_highlight_details": self._handle_get_highlight_details,
         }
 
@@ -60,9 +62,15 @@ class FunctionHandler:
         team = args.get("team", "all")
         return self._writer.get_all_robots_summary_data(team)
 
-    def _handle_get_formation_analysis(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        focus = args.get("focus", "both")
-        return self._writer.get_formation_analysis_data(focus)
+    def _handle_get_team_cards_and_fouls(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        return self._writer.get_team_cards_and_fouls_data()
+
+    def _handle_get_match_stats(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        return self._writer.get_match_stats_data()
+
+    def _handle_get_event_history(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        count = args.get("count", 5)
+        return self._writer.get_event_history_data(int(count))
 
     def _handle_get_highlight_details(self, args: Dict[str, Any]) -> Dict[str, Any]:
         highlight_type = args.get("highlight_type", "any")

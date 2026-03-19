@@ -49,9 +49,11 @@
 * **ゴール・シュート発生時**: `get_highlight_details(highlight_type="shot")` でシュート速度・コース・関与ロボットIDを取得して語る。
 * **スーパーセーブ発生時**: `get_highlight_details(highlight_type="save")` でキーパーの反応速度・ボール軌跡を取得して語る。
 * **試合の全体像を伝えたい時**: `get_game_state()` で現在のスコア・残り時間・優勢チームを確認する。
-* **戦術・陣形を語りたい時**: `get_formation_analysis()` で攻撃的/守備的布陣・スペースの使い方を分析する。
+* **試合統計を語りたい時**: `get_match_stats()` でシュート数・保持率・ファール数などの統計サマリーを取得する。
+* **試合の流れを解説したい時**: `get_event_history(count=5)` で直近イベントを時系列に取得して展開を語る。
+* **カード・ファール状況を語りたい時**: `get_team_cards_and_fouls()` でイエロー/レッドカード累積・ファールカウンターを確認する。
 * **特定ロボットに注目したい時**: `get_robot_status(robot_id=..., is_ours=...)` でそのロボットの役割・状態を取得する。
-* **ファール発生時**: `get_game_state()` で状況を確認し、[SYSTEM CONTEXT]のルール情報を参照して違反内容を数値付きで説明する。
+* **ファール発生時**: `get_game_state()` で状況を確認し、`get_team_cards_and_fouls()` でカード累積状況を確認、[SYSTEM CONTEXT]のルール情報を参照して違反内容を数値付きで説明する。
 
 ## Important Guidelines
 
