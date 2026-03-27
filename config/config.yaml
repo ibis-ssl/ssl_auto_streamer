@@ -1,8 +1,8 @@
 analysis_agent:
   enabled: true
+  max_output_tokens: 512
   model: gemini-3-flash-preview
   temperature: 0.7
-  max_output_tokens: 512
   timeout_seconds: 8
 audio:
   device: ''
@@ -17,8 +17,8 @@ gemini:
   sample_rate: 24000
 ssl:
   gc_addr: 224.5.23.1
-  gc_port: 11003
+  gc_port: 10003
   our_team_color: blue
   our_team_name: ibis
   tracker_addr: 224.5.23.2
-  tracker_port: 11010
+  tracker_port: 10010
