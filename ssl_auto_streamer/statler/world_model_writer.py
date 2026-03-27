@@ -394,7 +394,6 @@ class WorldModelWriter:
             "SHOT": 60,
             "INTERCEPTION": 55,
             "PASS": 30,
-            "POSSESSION_CHANGE": 20,
         }
         base_score = scores.get(event_type, 10)
 

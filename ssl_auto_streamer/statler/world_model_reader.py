@@ -69,11 +69,6 @@ class WorldModelReader:
                 "instruction": "インターセプトしたチームとロボットIDを短く伝える。",
                 "suggested_function": None,
             },
-            "POSSESSION_CHANGE": {
-                "hint": "",
-                "instruction": "ボール保持が変わったことを一言で。過度に強調しない。",
-                "suggested_function": None,
-            },
             "BALL_OUT": {
                 "hint": "ボールアウトです。",
                 "instruction": "どちらのチームが出したか、フィールドのどの辺から出たかを伝える。",
@@ -126,7 +121,7 @@ class WorldModelReader:
         priority = 1
         if event_type in ["GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY"]:
             priority = 2
-        elif event_type in ["POSSESSION_CHANGE", "BALL_OUT", "BALL_PLACEMENT"]:
+        elif event_type in ["BALL_OUT", "BALL_PLACEMENT"]:
             priority = 0
 
         return CommentaryRequest(

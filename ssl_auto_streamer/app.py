@@ -235,7 +235,6 @@ class CommentaryApp:
         # Event cooldowns
         self._last_commentary_time: Dict[str, float] = {}
         self._event_cooldowns = {
-            "POSSESSION_CHANGE": 3.0,
             "SHOT": 2.0,
             "FAST_SHOT": 2.0,
             "GOAL": 5.0,

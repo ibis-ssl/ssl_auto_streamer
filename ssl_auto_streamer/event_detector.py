@@ -74,7 +74,6 @@ _TEAM_COMMAND_MAP = {
 _SHOT_SPEED_THRESHOLD = 6.0       # m/s
 _PASS_SPEED_THRESHOLD = 1.0       # m/s
 _BALL_CONTACT_DIST = 0.15         # m
-_POSSESSION_CHANGE_MIN_DIST = 0.5  # m from ball to new possessor
 
 
 class EventDetector:
@@ -163,24 +162,6 @@ class EventDetector:
         current_possessor = self._determine_possessor(
             ball_pos, nearest_blue, nearest_yellow
         )
-
-        # Possession change detection
-        if (
-            current_possessor is not None
-            and self._prev_possessor is not None
-            and current_possessor["team"] != self._prev_possessor["team"]
-            and ball_speed > 0.3
-        ):
-            events.append(
-                DetectedEvent(
-                    event_type="POSSESSION_CHANGE",
-                    position=ball_pos,
-                    ball_speed=ball_speed,
-                    confidence=0.7,
-                    primary_robot=current_possessor,
-                    secondary_robot=self._prev_possessor,
-                )
-            )
 
         # Pass detection (same team, new robot near ball, ball moving)
         if (
@@ -410,10 +391,6 @@ class EventDetector:
         if blue_dist < _BALL_CONTACT_DIST:
             return {"id": nearest_blue["id"], "team": "blue"}
         if yellow_dist < _BALL_CONTACT_DIST:
-            return {"id": nearest_yellow["id"], "team": "yellow"}
-        if blue_dist < _POSSESSION_CHANGE_MIN_DIST and blue_dist < yellow_dist:
-            return {"id": nearest_blue["id"], "team": "blue"}
-        if yellow_dist < _POSSESSION_CHANGE_MIN_DIST and yellow_dist < blue_dist:
             return {"id": nearest_yellow["id"], "team": "yellow"}
         return None
 
