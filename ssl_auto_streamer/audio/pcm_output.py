@@ -134,11 +134,11 @@ class PcmAudioOutput:
         """Discard all buffered audio (for barge-in support)."""
         with self._lock:
             self._buffer.clear()
-        self._drain_complete.set()  # クリアされたのでドレイン済みとみなす
+            self._drain_complete.set()
 
-    async def wait_until_drained(self, timeout: float = 30.0) -> bool:
+    async def wait_until_drained(self, timeout: float = 10.0) -> bool:
         """バッファが空になるまで待機する（asyncio対応）。タイムアウト時はFalseを返す。"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._drain_complete.wait, timeout)
 
     def _playback_loop(self) -> None:
@@ -168,10 +168,6 @@ class PcmAudioOutput:
                         self._stream.write(chunk, exception_on_underflow=False)
                 except Exception as e:
                     logger.error(f"Playback error: {e}")
-                # チャンク再生後にバッファが空になったか確認
-                with self._lock:
-                    if not self._buffer:
-                        self._drain_complete.set()
             else:
                 # Wait until stop is signalled or next check interval
                 self._stop_event.wait(timeout=0.005)

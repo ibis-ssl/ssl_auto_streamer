@@ -85,6 +85,7 @@ class UtteranceQueue:
                 for u in self._pending
             ],
             "is_synthesizing": self._is_synthesizing,
+            "is_playing": self._audio_output.is_playing,
             "current_speaking": (
                 {"id": self._current_speaking.id, "text": self._current_speaking.text}
                 if self._current_speaking
@@ -211,11 +212,16 @@ class UtteranceQueue:
                 self._is_synthesizing = False
 
     async def _synthesize_and_play(self, utt: Utterance) -> None:
-        """1発話を合成して再生する。キャンセル可能。"""
+        """1発話を合成して再生する。実際の音声再生完了まで待機する。キャンセル可能。"""
         async for pcm_chunk in self._tts.synthesize_stream(
             utt.text, cancel_event=self._cancel_event
         ):
             self._audio_output.play(pcm_chunk)
+
+        # 末尾の端数バイトをフラッシュし、実際の音声再生が完了するまで待機する
+        if not self._cancel_event.is_set():
+            self._audio_output.flush_buffer()
+            await self._audio_output.wait_until_drained()
 
     def _build_game_context(self) -> Dict[str, Any]:
         """WorldModelWriter から試合状況の要約を構築する。"""
