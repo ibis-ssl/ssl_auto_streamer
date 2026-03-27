@@ -68,6 +68,7 @@ class Utterance:
     priority: int  # 0=LOW, 1=NORMAL, 2=HIGH
     event_type: Optional[str] = None
     enqueued_at: float = field(default_factory=time.monotonic)
+    id: int = 0  # UtteranceQueue が割り当てる連番
 
 
 class ReadingManager:

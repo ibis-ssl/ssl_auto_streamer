@@ -211,7 +211,15 @@ class CommentaryApp:
                 on_start_streaming=self._on_web_start_streaming,
                 on_stop_streaming=self._on_web_stop_streaming,
                 get_streaming=lambda: self._streaming,
+                get_pipeline_snapshot=(
+                    lambda: self._utterance_queue.get_pipeline_snapshot()
+                    if self._utterance_queue else None
+                ),
             )
+
+        # パイプラインイベントを WebServer に橋渡し
+        if self._utterance_queue and self._web_server:
+            self._utterance_queue.set_pipeline_callback(self._on_pipeline_event)
 
         # Event cooldowns
         self._last_commentary_time: Dict[str, float] = {}
@@ -610,6 +618,11 @@ class CommentaryApp:
                         event_type=self._current_event_type,
                     )
             self._tts_buffer = parts[-1]
+
+    def _on_pipeline_event(self, event: str, data: Dict[str, Any]) -> None:
+        """UtteranceQueue のパイプラインイベントを WebServer に転送する。"""
+        if self._web_server:
+            self._web_server.push_pipeline_event(event, data)
 
     def _on_transcription_received(self, text: str) -> None:
         """Handle output audio transcription from Gemini (audio mode)."""
