@@ -65,7 +65,38 @@
       <canvas id="field-canvas"></canvas>
     </div>
 
-    <!-- Right column -->
+    <!-- Centre column: Pipeline + Commentary -->
+    <div id="center-col">
+
+      <!-- Transcription (live subtitle) -->
+      <div class="panel" id="transcription-panel">
+        <div class="panel-header">字幕 (文字起こし)</div>
+        <div class="panel-body">
+          <div id="transcription-text" class="transcription-text"></div>
+        </div>
+      </div>
+
+      <!-- Pipeline Monitor -->
+      <div class="panel flex-fill" id="pipeline-panel">
+        <div class="panel-header">実況パイプライン</div>
+        <div class="panel-body pipeline-body">
+          <div id="pipeline-current"></div>
+          <div id="pipeline-pending"></div>
+          <ul class="log-list" id="pipeline-log-list"></ul>
+        </div>
+      </div>
+
+      <!-- Commentary History -->
+      <div class="panel flex-fill">
+        <div class="panel-header">実況ログ</div>
+        <div class="panel-body">
+          <ul class="log-list" id="commentary-list"></ul>
+        </div>
+      </div>
+
+    </div><!-- /center-col -->
+
+    <!-- Right column: Controls + Status + Event Log -->
     <div id="right-col">
 
       <!-- User Input -->
@@ -110,22 +141,6 @@
         <div class="panel-header">イベントログ (直近20件)</div>
         <div class="panel-body">
           <ul class="log-list" id="event-log-list"></ul>
-        </div>
-      </div>
-
-      <!-- Transcription (live subtitle) -->
-      <div class="panel" id="transcription-panel">
-        <div class="panel-header">字幕 (文字起こし)</div>
-        <div class="panel-body">
-          <div id="transcription-text" class="transcription-text"></div>
-        </div>
-      </div>
-
-      <!-- Commentary History -->
-      <div class="panel flex-fill">
-        <div class="panel-header">実況ログ</div>
-        <div class="panel-body">
-          <ul class="log-list" id="commentary-list"></ul>
         </div>
       </div>
 
