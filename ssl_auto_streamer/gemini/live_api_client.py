@@ -50,6 +50,7 @@ class GeminiConfig:
     tools_config: List[Dict[str, Any]] = field(default_factory=list)
     thinking_level: str = "medium"  # minimal / low / medium / high
     output_transcription: bool = True
+    response_mode: str = "text"  # "text" (local TTS) or "audio" (Gemini native)
 
 
 class GeminiLiveApiClient:
@@ -69,6 +70,7 @@ class GeminiLiveApiClient:
         self._connected = False
         self._is_generating = False
         self._audio_callback: Optional[Callable[[bytes], None]] = None
+        self._text_callback: Optional[Callable[[str], None]] = None
         self._function_call_handler: Optional[
             Callable[[str, Dict[str, Any]], Dict[str, Any]]
         ] = None
@@ -127,19 +129,24 @@ class GeminiLiveApiClient:
         try:
             self._ws = await websockets.connect(self._ws_url)
 
-            generation_config: Dict[str, Any] = {
-                "response_modalities": ["AUDIO"],
-                "speech_config": {
-                    "voice_config": {
-                        "prebuilt_voice_config": {
-                            "voice_name": self._config.voice
+            if self._config.response_mode == "audio":
+                generation_config: Dict[str, Any] = {
+                    "response_modalities": ["AUDIO"],
+                    "speech_config": {
+                        "voice_config": {
+                            "prebuilt_voice_config": {
+                                "voice_name": self._config.voice
+                            }
                         }
-                    }
-                },
-                "thinking_config": {
-                    "thinkingLevel": self._config.thinking_level,
-                },
-            }
+                    },
+                    "thinking_config": {
+                        "thinkingLevel": self._config.thinking_level,
+                    },
+                }
+            else:
+                generation_config = {
+                    "response_modalities": ["TEXT"],
+                }
 
             setup_msg = {
                 "setup": {
@@ -156,6 +163,7 @@ class GeminiLiveApiClient:
                     {"function_declarations": self._config.tools_config}
                 ]
 
+            logger.debug(f"Setup message: {json.dumps(generation_config)}")
             await self._ws.send(json.dumps(setup_msg))
 
             response = await self._ws.recv()
@@ -203,6 +211,9 @@ class GeminiLiveApiClient:
 
     def set_audio_callback(self, callback: Callable[[bytes], None]) -> None:
         self._audio_callback = callback
+
+    def set_text_callback(self, callback: Callable[[str], None]) -> None:
+        self._text_callback = callback
 
     def set_function_call_handler(
         self, handler: Callable[..., Any]
@@ -302,6 +313,11 @@ class GeminiLiveApiClient:
                                         f"Received audio: {len(audio_bytes)} bytes"
                                     )
                                     self._audio_callback(audio_bytes)
+                        if "text" in part:
+                            text = part["text"]
+                            if text and self._text_callback:
+                                logger.debug(f"Received text: {text!r}")
+                                self._text_callback(text)
 
             # 出力音声の文字起こし (gemini-3.1以降)
             if "outputTranscription" in server_content:

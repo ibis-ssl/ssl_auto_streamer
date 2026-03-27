@@ -17,6 +17,12 @@ gemini:
   output_transcription: true
   sample_rate: 24000
   thinking_level: medium
+  response_mode: text  # "text" (VOICEVOX TTS) or "audio" (Gemini native)
+  text_model: gemini-3.1-flash-lite-preview  # response_mode: text 時に使用するモデル
+voicevox:
+  host: http://localhost:50021
+  speaker: 3
+  speed_scale: 1.0
 ssl:
   gc_addr: 224.5.23.1
   gc_port: 10003
