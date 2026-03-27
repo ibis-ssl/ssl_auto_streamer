@@ -45,27 +45,27 @@ class WorldModelReader:
 
         self._reflex_templates = {
             "GOAL": {
-                "hint": "ゴール！",
-                "instruction": "得点したチーム名とロボットIDを叫び、スコアを更新して伝える。シュートの速度や距離にも触れる。",
+                "hint": "得点です。",
+                "instruction": "得点したチーム名とロボットID、更新後のスコアを簡潔に伝える。可能であればシュートの速度や距離も数値で補足する。",
                 "suggested_function": "get_highlight_details",
             },
             "FAST_SHOT": {
-                "hint": "強烈なシュート！",
+                "hint": "高速シュートです。",
                 "instruction": "シュート速度を秒速で読み上げ、シューターのIDを伝える。制限速度秒速6.5メートルとの比較も言及する。",
                 "suggested_function": "get_highlight_details",
             },
             "SHOT": {
-                "hint": "シュート！",
+                "hint": "シュートです。",
                 "instruction": "シューターのIDと位置、シュートの方向を短く伝える。",
                 "suggested_function": None,
             },
             "SAVE": {
-                "hint": "ナイスセーブ！",
+                "hint": "セーブです。",
                 "instruction": "キーパーのIDを呼び、どの方向に飛んできたシュートを止めたか伝える。",
                 "suggested_function": "get_highlight_details",
             },
             "INTERCEPTION": {
-                "hint": "カット！",
+                "hint": "インターセプトです。",
                 "instruction": "インターセプトしたチームとロボットIDを短く伝える。",
                 "suggested_function": None,
             },
@@ -75,17 +75,17 @@ class WorldModelReader:
                 "suggested_function": None,
             },
             "BALL_OUT": {
-                "hint": "アウト！",
+                "hint": "ボールアウトです。",
                 "instruction": "どちらのチームが出したか、フィールドのどの辺から出たかを伝える。",
                 "suggested_function": None,
             },
             "SET_PLAY": {
-                "hint": "",
+                "hint": "セットプレーです。",
                 "instruction": "セットプレーの種類（フリーキック/キックオフ/PK等）とどちらのチームかを伝える。",
                 "suggested_function": "get_game_state",
             },
             "FOUL": {
-                "hint": "ファール！",
+                "hint": "ファールです。",
                 "instruction": "ファールの種類名と違反内容を具体的に説明する。数値がある場合は日本語で読み上げる。",
                 "suggested_function": "get_game_state",
             },
@@ -192,11 +192,11 @@ class WorldModelReader:
 
     _ANALYSIS_INSTRUCTIONS: Dict[str, str] = {
         "goal_replay": "直前のゴールを詳しく振り返る。シュート速度、距離、シューターのID、スコアの変動を具体的に伝える。",
-        "shot_analysis": "直前のシュートを分析する。コース、速度、キーパーの反応を語る。",
-        "save_highlight": "キーパーのファインセーブを称える。反応速度やポジショニングに触れる。",
+        "shot_analysis": "直前のシュートを分析する。コース、速度、キーパーの反応を整理して伝える。",
+        "save_highlight": "直前のセーブを分析する。反応速度やポジショニングを具体的に伝える。",
         "game_summary": "ここまでの試合を総括する。スコア、主要なハイライト、両チームの戦い方を分析する。",
-        "team_introduction": "両チームの特徴と布陣を紹介する。注目ポイントを伝える。",
-        "tactical_analysis": "現在の戦術的状況を分析する。布陣、数的優位、攻撃パターンを語る。",
+        "team_introduction": "両チームの特徴と布陣を紹介する。注目点を簡潔に伝える。",
+        "tactical_analysis": "現在の戦術的状況を分析する。布陣、数的優位、攻撃パターンを整理して伝える。",
     }
 
     def _determine_analysis_type(self, context: GameContext, highlights: list) -> str:
