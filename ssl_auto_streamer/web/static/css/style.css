@@ -83,39 +83,13 @@
   --md-sys-motion-duration-medium2: 300ms;
   --md-sys-motion-duration-long2:   500ms;
 
-  /* ---- Legacy aliases (JS参照・overlay-control互換) ---- */
-  --bg:           var(--md-sys-color-surface-dim);
-  --bg-deep:      var(--md-sys-color-surface-container-lowest);
-  --surface:      var(--md-sys-color-surface-container);
-  --surface-glass:var(--md-sys-color-surface-container);
-  --border:       var(--md-sys-color-outline-variant);
-  --border-subtle:var(--md-sys-color-outline-variant);
-  --text:         var(--md-sys-color-on-surface);
-  --text-muted:   var(--md-sys-color-on-surface-variant);
-  --blue:         var(--md-ext-blue);
-  --blue-light:   var(--md-ext-blue-light);
-  --yellow:       var(--md-ext-yellow);
-  --yellow-light: var(--md-ext-yellow-light);
-  --green:        var(--md-ext-green);
-  --red:          var(--md-ext-red);
-  --orange:       var(--md-ext-yellow-light);
 
-  /* ---- Deprecated tokens (kept for compatibility) ---- */
-  --radius-panel: var(--md-sys-shape-corner-large);
-  --radius-btn:   var(--md-sys-shape-corner-full);
-  --radius-sm:    var(--md-sys-shape-corner-extra-small);
-  --transition:   var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
 }
 
 /* ===== Animations ===== */
-@keyframes status-pulse {
+@keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.6; }
-}
-
-@keyframes ptt-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.65; }
 }
 
 @keyframes goal-flash {
@@ -209,7 +183,7 @@ nav {
 
 #ws-dot.connected {
   background: var(--md-ext-green);
-  animation: status-pulse 2.5s ease-in-out infinite;
+  animation: pulse 2.5s ease-in-out infinite;
 }
 
 #ws-dot.error { background: var(--md-sys-color-error); }
@@ -409,7 +383,7 @@ main {
 
 .status-dot.ok {
   background: var(--md-ext-green);
-  animation: status-pulse 2.5s ease-in-out infinite;
+  animation: pulse 2.5s ease-in-out infinite;
 }
 
 .status-dot.ng {
@@ -491,16 +465,10 @@ main {
   overflow: hidden;
 }
 
-.settings-section-title {
-  padding: 10px 16px;
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--md-sys-color-on-surface-variant);
-  background: var(--md-sys-color-surface-container-high);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
-}
+/* Utility: flex-fill for log panels */
+.flex-fill { flex: 1; min-height: 0; }
+
+/* .settings-section reuses .panel-header for its title */
 
 .form-group {
   display: flex;
@@ -604,32 +572,28 @@ select option {
   color: var(--md-sys-color-primary);
 }
 
-/* M3 Filled Tonal Button (start) */
+/* M3 Streaming Buttons (shared base) */
+.btn-start,
+.btn-stop {
+  font-size: 14px;
+  padding: 10px 32px;
+  font-weight: 600;
+  box-shadow: var(--md-sys-elevation-0);
+}
+
+.btn-start:hover,
+.btn-stop:hover {
+  box-shadow: var(--md-sys-elevation-1);
+}
+
 .btn-start {
   background: var(--md-ext-green);
   color: #fff;
-  font-size: 14px;
-  padding: 10px 32px;
-  font-weight: 600;
-  box-shadow: var(--md-sys-elevation-0);
 }
 
-.btn-start:hover {
-  box-shadow: var(--md-sys-elevation-1);
-}
-
-/* M3 Error Tonal Button (stop) */
 .btn-stop {
   background: var(--md-sys-color-error-container);
   color: var(--md-sys-color-on-error-container);
-  font-size: 14px;
-  padding: 10px 32px;
-  font-weight: 600;
-  box-shadow: var(--md-sys-elevation-0);
-}
-
-.btn-stop:hover {
-  box-shadow: var(--md-sys-elevation-1);
 }
 
 /* ===== Streaming Control ===== */
@@ -738,14 +702,14 @@ select option {
   background: var(--md-sys-color-error-container);
   color: var(--md-sys-color-on-error-container);
   border: 1px solid transparent;
-  animation: ptt-pulse 1s var(--md-sys-motion-easing-standard) infinite;
+  animation: pulse 1s var(--md-sys-motion-easing-standard) infinite;
 }
 
 .ptt-processing {
   background: var(--md-sys-color-tertiary-container);
   color: var(--md-sys-color-on-tertiary-container);
   border: 1px solid transparent;
-  animation: ptt-pulse 0.6s var(--md-sys-motion-easing-standard) infinite;
+  animation: pulse 0.6s var(--md-sys-motion-easing-standard) infinite;
 }
 
 /* ===== User Input Event Types ===== */

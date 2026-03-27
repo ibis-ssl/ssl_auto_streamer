@@ -164,27 +164,20 @@ class WebServer:
             "streaming": streaming,
         }
 
+    @staticmethod
+    def _safe_call(method: Callable, default: Any = None) -> Any:
+        """Call a method, returning default on failure."""
+        try:
+            return method()
+        except Exception:
+            return default if default is not None else {}
+
     def _build_state_message(self) -> Dict[str, Any]:
         """Build the full state snapshot for WebSocket broadcast."""
-        try:
-            game_state = self._writer.get_game_state_data()
-        except Exception:
-            game_state = {}
-
-        try:
-            ball = self._writer.get_ball_trajectory_data()
-        except Exception:
-            ball = {}
-
-        try:
-            robots_summary = self._writer.get_all_robots_summary_data()
-        except Exception:
-            robots_summary = {}
-
-        try:
-            field_snapshot = self._writer.get_field_snapshot_data()
-        except Exception:
-            field_snapshot = {}
+        game_state = self._safe_call(self._writer.get_game_state_data)
+        ball = self._safe_call(self._writer.get_ball_trajectory_data)
+        robots_summary = self._safe_call(self._writer.get_all_robots_summary_data)
+        field_snapshot = self._safe_call(self._writer.get_field_snapshot_data)
 
         team_info = self._build_team_info()
         return {
@@ -380,10 +373,7 @@ class WebServer:
 
     async def _handle_get_status(self, request: web.Request) -> web.Response:
         """Return system status."""
-        try:
-            game_state = self._writer.get_game_state_data()
-        except Exception:
-            game_state = {}
+        game_state = self._safe_call(self._writer.get_game_state_data)
         return web.json_response({**self._build_status_dict(), "game_state": game_state})
 
     async def _handle_get_team_profiles(self, request: web.Request) -> web.Response:

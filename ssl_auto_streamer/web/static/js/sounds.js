@@ -42,16 +42,22 @@ class SoundManager {
     return this._ctx;
   }
 
+  /** OscillatorNode + GainNode を生成し destination へ接続して返す */
+  _tone(type = 'sine') {
+    const ctx = this._ctx_ensure();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = type;
+    return { ctx, osc, gain };
+  }
+
   /** ゴール: 上昇する3音 */
   _playGoal() {
-    const ctx = this._ctx_ensure();
     const freqs = [523, 659, 784]; // C5, E5, G5
     freqs.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
+      const { ctx, osc, gain } = this._tone('sine');
       osc.frequency.value = freq;
       const t = ctx.currentTime + i * 0.12;
       gain.gain.setValueAtTime(0, t);
@@ -64,12 +70,7 @@ class SoundManager {
 
   /** シュート: 短い打撃音 */
   _playShot() {
-    const ctx = this._ctx_ensure();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'square';
+    const { ctx, osc, gain } = this._tone('square');
     osc.frequency.setValueAtTime(300, ctx.currentTime);
     osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + 0.1);
     gain.gain.setValueAtTime(0.2, ctx.currentTime);
@@ -80,13 +81,8 @@ class SoundManager {
 
   /** ファール: 短い警告ブザー */
   _playFoul() {
-    const ctx = this._ctx_ensure();
     for (let i = 0; i < 2; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sawtooth';
+      const { ctx, osc, gain } = this._tone('sawtooth');
       osc.frequency.value = 440;
       const t = ctx.currentTime + i * 0.18;
       gain.gain.setValueAtTime(0.15, t);
@@ -101,13 +97,8 @@ class SoundManager {
    * @param {number} count 回数
    */
   _playWhistle(count) {
-    const ctx = this._ctx_ensure();
     for (let i = 0; i < count; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
+      const { ctx, osc, gain } = this._tone('sine');
       osc.frequency.value = 880;
       const t = ctx.currentTime + i * 0.55;
       gain.gain.setValueAtTime(0.3, t);
@@ -119,12 +110,7 @@ class SoundManager {
 
   /** 単発ビープ */
   _playBeep(freq, duration) {
-    const ctx = this._ctx_ensure();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
+    const { ctx, osc, gain } = this._tone('sine');
     osc.frequency.value = freq;
     gain.gain.setValueAtTime(0.2, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);

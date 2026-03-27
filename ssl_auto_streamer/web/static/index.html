@@ -106,7 +106,7 @@
       </div>
 
       <!-- Event Log -->
-      <div class="panel" id="event-log-panel" style="flex:1;min-height:0;">
+      <div class="panel flex-fill" id="event-log-panel">
         <div class="panel-header">イベントログ (直近20件)</div>
         <div class="panel-body">
           <ul class="log-list" id="event-log-list"></ul>
@@ -114,7 +114,7 @@
       </div>
 
       <!-- Commentary History -->
-      <div class="panel" style="flex:1;min-height:0;">
+      <div class="panel flex-fill">
         <div class="panel-header">実況ログ</div>
         <div class="panel-body">
           <ul class="log-list" id="commentary-list"></ul>
@@ -131,7 +131,7 @@
 
       <!-- SSL Settings -->
       <div class="settings-section">
-        <div class="settings-section-title">SSL 設定</div>
+        <div class="panel-header">SSL 設定</div>
         <div class="form-group">
           <label for="cfg-team-color">自チームカラー</label>
           <select id="cfg-team-color">
@@ -163,7 +163,7 @@
 
       <!-- Commentary Settings -->
       <div class="settings-section">
-        <div class="settings-section-title">実況設定</div>
+        <div class="panel-header">実況設定</div>
         <div class="form-group">
           <label for="cfg-silence-threshold">沈黙閾値 (秒)</label>
           <input type="number" id="cfg-silence-threshold" step="0.5" placeholder="5.0">
@@ -176,7 +176,7 @@
 
       <!-- Gemini Settings -->
       <div class="settings-section">
-        <div class="settings-section-title">Gemini 設定 (要再起動)</div>
+        <div class="panel-header">Gemini 設定 (要再起動)</div>
         <div class="form-group">
           <label for="cfg-gemini-model">モデル</label>
           <input type="text" id="cfg-gemini-model" placeholder="gemini-2.0-flash-exp">

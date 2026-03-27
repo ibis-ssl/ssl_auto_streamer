@@ -17,6 +17,11 @@ const FIELD = {
   ballRadius: 0.043, // meters
 };
 
+const TEAM_COLOR = {
+  ours:   '#388bfd',
+  theirs: '#e3b341',
+};
+
 class FieldRenderer {
   constructor(canvas) {
     this._canvas = canvas;
@@ -32,13 +37,16 @@ class FieldRenderer {
 
   _resize() {
     const rect = this._canvas.parentElement.getBoundingClientRect();
-    this._canvas.width = rect.width;
-    this._canvas.height = rect.height;
-    const scaleX = (rect.width - this._padding * 2) / (FIELD.halfLength * 2);
-    const scaleY = (rect.height - this._padding * 2) / (FIELD.halfWidth * 2);
+    const w = Math.round(rect.width);
+    const h = Math.round(rect.height);
+    if (w === this._canvas.width && h === this._canvas.height) return;
+    this._canvas.width = w;
+    this._canvas.height = h;
+    const scaleX = (w - this._padding * 2) / (FIELD.halfLength * 2);
+    const scaleY = (h - this._padding * 2) / (FIELD.halfWidth * 2);
     this._scale = Math.min(scaleX, scaleY);
-    this._ox = rect.width / 2;
-    this._oy = rect.height / 2;
+    this._ox = w / 2;
+    this._oy = h / 2;
   }
 
   /** Convert SSL coordinates (meters) to canvas pixels */
@@ -133,12 +141,12 @@ class FieldRenderer {
     const r = Math.max(4, this._m(FIELD.robotRadius));
     if (oursRobots) {
       for (const robot of oursRobots) {
-        this._drawRobot(ctx, robot, '#388bfd', r);
+        this._drawRobot(ctx, robot, TEAM_COLOR.ours, r);
       }
     }
     if (theirsRobots) {
       for (const robot of theirsRobots) {
-        this._drawRobot(ctx, robot, '#e3b341', r);
+        this._drawRobot(ctx, robot, TEAM_COLOR.theirs, r);
       }
     }
   }

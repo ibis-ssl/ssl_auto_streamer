@@ -144,7 +144,7 @@ function handleMessage(msg) {
     lastState = msg;
     updateDashboard(msg);
   } else if (msg.type === 'event') {
-    appendEventLog(msg);
+    flashEventPanel();
     soundManager.playForEvent(msg.event_type);
   } else if (msg.type === 'commentary') {
     appendCommentary(msg);
@@ -242,10 +242,16 @@ function updateField(state) {
   fieldRenderer.draw(snap, state.game_state);
 }
 
-// ===== Log Rendering (shared helper) =====
+// ===== Log Rendering (shared helper with change detection) =====
+const _logCache = {};
+
 function renderLogList(listId, items, renderContent) {
   const list = document.getElementById(listId);
   if (!list) return;
+  const lastTs = items.length > 0 ? items[items.length - 1].timestamp : 0;
+  const key = items.length + ':' + lastTs;
+  if (_logCache[listId] === key) return;
+  _logCache[listId] = key;
   list.innerHTML = '';
   const reversed = [...items].reverse();
   for (const item of reversed) {
@@ -268,10 +274,10 @@ function renderEventLog(events) {
   });
 }
 
-function appendEventLog(ev) {
+function flashEventPanel() {
   const panel = document.getElementById('event-log-panel');
   if (panel) {
-    panel.style.borderColor = '#388bfd';
+    panel.style.borderColor = 'var(--md-ext-blue)';
     setTimeout(() => { panel.style.borderColor = ''; }, 300);
   }
 }
