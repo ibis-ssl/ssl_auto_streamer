@@ -19,6 +19,8 @@ import aiohttp
 import yaml
 from aiohttp import web
 
+from ssl_auto_streamer.gemini import ThinkingLevel
+
 from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
 
 logger = logging.getLogger(__name__)
@@ -263,6 +265,7 @@ class WebServer:
                             text = data.get("text", "").strip()
                             if text:
                                 if self._gemini_client.is_connected():
+                                    await self._gemini_client.set_thinking_level(ThinkingLevel.MEDIUM)
                                     await self._gemini_client.send_text(text)
                                     logger.info(f"[user_text] -> Gemini: 「{text}」")
                                 else:
@@ -271,11 +274,12 @@ class WebServer:
                         elif msg_type == "audio_chunk":
                             audio_data = data.get("data", "")
                             if audio_data:
-                                if ptt_start is None:
-                                    ptt_start = time.time()
-                                    ptt_chunks = 0
-                                    logger.info("[PTT] 録音開始")
                                 if self._gemini_client.is_connected():
+                                    if ptt_start is None:
+                                        ptt_start = time.time()
+                                        ptt_chunks = 0
+                                        logger.info("[PTT] 録音開始")
+                                        await self._gemini_client.set_thinking_level(ThinkingLevel.MEDIUM)
                                     await self._gemini_client.send_audio(audio_data)
                                     ptt_chunks += 1
                                 else:

@@ -14,6 +14,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Callable, Optional, Dict, Any, List
 
 try:
@@ -26,6 +27,15 @@ except ImportError:
     WebSocketClientProtocol = None
 
 logger = logging.getLogger(__name__)
+
+
+class ThinkingLevel(str, Enum):
+    """Gemini Live API のthinkingLevel設定値。"""
+
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
 
 
 @dataclass
@@ -198,6 +208,13 @@ class GeminiLiveApiClient:
         self, handler: Callable[..., Any]
     ) -> None:
         self._function_call_handler = handler
+
+    async def set_thinking_level(self, level: str) -> None:
+        """thinkingLevelを更新する。次回セッション接続時に反映される。"""
+        if level == self._config.thinking_level:
+            return
+        logger.info(f"thinkingLevel queued: {self._config.thinking_level} -> {level} (applies on next session)")
+        self._config.thinking_level = level
 
     async def send_audio(self, audio_b64: str) -> None:
         """Send audio via realtime_input (PCM 16-bit mono 16000Hz + trailing silence, base64-encoded)."""

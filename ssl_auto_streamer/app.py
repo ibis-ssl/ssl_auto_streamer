@@ -22,7 +22,7 @@ from ssl_auto_streamer.data import (
 from ssl_auto_streamer.statler import WorldModelWriter, WorldModelReader
 from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
-from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent
+from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent, ThinkingLevel
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
 from ssl_auto_streamer.audio import PcmAudioOutput
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
@@ -280,6 +280,7 @@ class CommentaryApp:
                     "yellow": get_team_reading_from_data(yellow_name, self._team_profiles),
                 },
             }, ensure_ascii=False)
+            await self._gemini_client.set_thinking_level(ThinkingLevel.MEDIUM)
             await self._gemini_client.send_text(startup_msg)
         else:
             logger.warning("Failed to connect to Gemini API")
@@ -417,7 +418,7 @@ class CommentaryApp:
 
             json_payload = self._reader.to_gemini_json(request)
             logger.info(f"Sending reflex commentary for {event.event_type}")
-            asyncio.create_task(self._gemini_client.send_text(json_payload))
+            asyncio.create_task(self._send_reflex(json_payload, request.priority))
             self._last_commentary_time[event.event_type] = current_time
             if self._web_server:
                 self._web_server.push_commentary(
@@ -441,6 +442,7 @@ class CommentaryApp:
                     request = self._reader.generate_analysis()
                     if request:
                         json_payload = self._reader.to_gemini_json(request)
+                        await self._gemini_client.set_thinking_level(ThinkingLevel.HIGH)
                         await self._gemini_client.send_text(json_payload)
                         if self._web_server:
                             self._web_server.push_commentary("[アナリスト実況]")
@@ -525,8 +527,14 @@ class CommentaryApp:
             yellow_team_name=yellow_name if yellow_name != DEFAULT_YELLOW_TEAM_NAME else None,
         )
         logger.info("Sending initial context to Gemini")
+        await self._gemini_client.set_thinking_level(ThinkingLevel.MINIMAL)
         await self._gemini_client.send_text(f"[SYSTEM CONTEXT]\n{context}")
         self._initial_context_sent = True
+
+    async def _send_reflex(self, payload: str, priority: int) -> None:
+        level = ThinkingLevel.MINIMAL if priority == 0 else ThinkingLevel.LOW
+        await self._gemini_client.set_thinking_level(level)
+        await self._gemini_client.send_text(payload)
 
     def _fire_and_forget(self, coro: Any) -> None:
         """Schedule a coroutine and keep a strong reference to prevent GC."""
@@ -582,4 +590,5 @@ class CommentaryApp:
             }
 
         update_json = json.dumps(update, ensure_ascii=False, indent=2)
+        await self._gemini_client.set_thinking_level(ThinkingLevel.MINIMAL)
         await self._gemini_client.send_text(f"[TEAM UPDATE]\n{update_json}")
