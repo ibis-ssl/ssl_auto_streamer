@@ -16,22 +16,94 @@
     <div class="team-color-bar"></div>
     <div class="team-name" id="name-left">Blue</div>
     <div class="team-score" id="score-left">-</div>
+    <div class="team-cards" id="cards-left">
+      <span class="card-badge yellow-card" id="yc-left"></span>
+      <span class="card-badge red-card" id="rc-left"></span>
+    </div>
   </div>
 
   <div id="hud-center">
     <div id="hud-timer">--:--</div>
     <div id="hud-situation">-</div>
+    <div id="hud-momentum"></div>
   </div>
 
   <div class="team-block" id="team-right">
-    <div class="team-color-bar"></div>
-    <div class="team-name" id="name-right">Yellow</div>
+    <div class="team-cards" id="cards-right">
+      <span class="card-badge yellow-card" id="yc-right"></span>
+      <span class="card-badge red-card" id="rc-right"></span>
+    </div>
     <div class="team-score" id="score-right">-</div>
+    <div class="team-name" id="name-right">Yellow</div>
+    <div class="team-color-bar"></div>
   </div>
+</div>
+
+<!-- ポゼッションバー -->
+<div id="possession-bar">
+  <div id="possession-fill-blue"></div>
+</div>
+
+<!-- スタッツパネル(右側スライドイン, デフォルト非表示) -->
+<div id="stats-panel" class="hidden">
+  <div class="stats-header">MATCH STATS</div>
+  <div class="stats-row" id="stat-possession">
+    <span class="stats-val-blue" id="sv-possession-blue">50%</span>
+    <div class="stats-bar-wrap">
+      <div class="stats-bar-blue" id="sb-possession-blue"></div>
+      <div class="stats-bar-yellow" id="sb-possession-yellow"></div>
+    </div>
+    <span class="stats-val-yellow" id="sv-possession-yellow">50%</span>
+    <span class="stats-label">ポゼッション</span>
+  </div>
+  <div class="stats-row" id="stat-shots">
+    <span class="stats-val-blue" id="sv-shots-blue">0</span>
+    <div class="stats-bar-wrap">
+      <div class="stats-bar-blue" id="sb-shots-blue"></div>
+      <div class="stats-bar-yellow" id="sb-shots-yellow"></div>
+    </div>
+    <span class="stats-val-yellow" id="sv-shots-yellow">0</span>
+    <span class="stats-label">シュート</span>
+  </div>
+  <div class="stats-row" id="stat-saves">
+    <span class="stats-val-blue" id="sv-saves-blue">0</span>
+    <div class="stats-bar-wrap">
+      <div class="stats-bar-blue" id="sb-saves-blue"></div>
+      <div class="stats-bar-yellow" id="sb-saves-yellow"></div>
+    </div>
+    <span class="stats-val-yellow" id="sv-saves-yellow">0</span>
+    <span class="stats-label">セーブ</span>
+  </div>
+  <div class="stats-row" id="stat-passes">
+    <span class="stats-val-blue" id="sv-passes-blue">0</span>
+    <div class="stats-bar-wrap">
+      <div class="stats-bar-blue" id="sb-passes-blue"></div>
+      <div class="stats-bar-yellow" id="sb-passes-yellow"></div>
+    </div>
+    <span class="stats-val-yellow" id="sv-passes-yellow">0</span>
+    <span class="stats-label">パス</span>
+  </div>
+  <div class="stats-row" id="stat-fouls">
+    <span class="stats-val-blue" id="sv-fouls-blue">0</span>
+    <div class="stats-bar-wrap">
+      <div class="stats-bar-blue" id="sb-fouls-blue"></div>
+      <div class="stats-bar-yellow" id="sb-fouls-yellow"></div>
+    </div>
+    <span class="stats-val-yellow" id="sv-fouls-yellow">0</span>
+    <span class="stats-label">ファール</span>
+  </div>
+</div>
+
+<!-- 字幕エリア(AI実況テキスト) -->
+<div id="subtitle-area" class="hidden">
+  <div id="subtitle-text"></div>
 </div>
 
 <!-- 下部テロップ -->
 <div id="ticker-area"></div>
+
+<!-- ゴール演出(フルスクリーンフラッシュ) -->
+<div id="goal-celebration" class="hidden"></div>
 
 <script src="/static/js/ws-utils.js"></script>
 <script src="/static/js/sounds.js"></script>

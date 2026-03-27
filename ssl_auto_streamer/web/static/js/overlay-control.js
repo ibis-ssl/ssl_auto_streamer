@@ -32,6 +32,22 @@ document.addEventListener('DOMContentLoaded', () => {
     wsClient.send({ type: 'overlay_control', action: 'manual_ticker', text, duration: 5000 });
     document.getElementById('ticker-text').value = '';
   });
+
+  document.getElementById('toggle-stats').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_stats', value: e.target.checked });
+  });
+
+  document.getElementById('toggle-subtitles').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_subtitles', value: e.target.checked });
+  });
+
+  document.getElementById('toggle-possession').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_possession', value: e.target.checked });
+  });
+
+  document.getElementById('toggle-celebration').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_celebration', value: e.target.checked });
+  });
 });
 
 function setStatus(ok) {

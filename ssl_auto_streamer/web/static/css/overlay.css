@@ -112,6 +112,36 @@ html, body {
   100% { color: var(--text); text-shadow: 0 0 12px var(--shadow); }
 }
 
+/* カードバッジ */
+.team-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.card-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 3px;
+  min-width: 18px;
+  text-align: center;
+  line-height: 1.4;
+  display: none;
+}
+
+.card-badge.yellow-card {
+  background: #e3b341;
+  color: #000;
+}
+
+.card-badge.red-card {
+  background: #f85149;
+  color: #fff;
+}
+
 /* 中央タイマーブロック */
 #hud-center {
   display: flex;
@@ -121,7 +151,7 @@ html, body {
   background: var(--hud-bg);
   padding: 0 28px;
   min-width: 280px;
-  gap: 4px;
+  gap: 2px;
   border-radius: 0 0 12px 12px;
 }
 
@@ -141,6 +171,181 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* モメンタムインジケータ */
+#hud-momentum {
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+#hud-momentum.blue {
+  opacity: 1;
+  color: #8bbfff;
+  animation: momentumPulse 1.8s ease-in-out infinite;
+}
+
+#hud-momentum.yellow {
+  opacity: 1;
+  color: #f0ca6a;
+  animation: momentumPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes momentumPulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1.0; }
+}
+
+/* ===== ポゼッションバー ===== */
+#possession-bar {
+  position: fixed;
+  top: 90px;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--yellow);
+  display: flex;
+  transition: opacity 0.4s ease;
+}
+
+#possession-bar.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#possession-fill-blue {
+  height: 100%;
+  background: var(--blue);
+  width: 50%;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== スタッツパネル ===== */
+#stats-panel {
+  position: fixed;
+  top: 110px;
+  right: 0;
+  width: 320px;
+  background: var(--hud-bg);
+  border-radius: 12px 0 0 12px;
+  padding: 12px 0;
+  transform: translateX(0);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.4s ease;
+}
+
+#stats-panel.hidden {
+  transform: translateX(100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.stats-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: rgba(200, 200, 200, 0.6);
+  text-align: center;
+  padding: 0 16px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 8px;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: 36px 1fr 36px;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 6px;
+  padding: 5px 12px;
+}
+
+.stats-val-blue {
+  font-family: 'DSEG7', monospace;
+  font-size: 16px;
+  color: #8bbfff;
+  text-align: right;
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.stats-val-yellow {
+  font-family: 'DSEG7', monospace;
+  font-size: 16px;
+  color: #f0ca6a;
+  text-align: left;
+  grid-column: 3;
+  grid-row: 1;
+}
+
+.stats-bar-wrap {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.08);
+}
+
+.stats-bar-blue {
+  height: 100%;
+  background: var(--blue);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stats-bar-yellow {
+  height: 100%;
+  background: var(--yellow);
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stats-label {
+  grid-column: 1 / 4;
+  grid-row: 2;
+  font-size: 10px;
+  color: rgba(200,200,200,0.5);
+  text-align: center;
+  letter-spacing: 0.5px;
+}
+
+/* ===== 字幕エリア ===== */
+#subtitle-area {
+  position: fixed;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  max-width: 1000px;
+  width: 90%;
+  transition: opacity 0.3s ease;
+}
+
+#subtitle-area.hidden {
+  opacity: 0;
+}
+
+#subtitle-text {
+  background: rgba(0, 0, 0, 0.75);
+  padding: 10px 28px;
+  border-radius: 8px;
+  font-size: 22px;
+  font-weight: 500;
+  color: #fff;
+  text-align: center;
+  line-height: 1.5;
+  text-shadow: 1px 1px 4px var(--shadow);
+  animation: subtitleIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes subtitleIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* ===== テロップ(下部) ===== */
@@ -198,4 +403,42 @@ html, body {
 @keyframes tickerOut {
   from { opacity: 1; transform: translateY(0); }
   to   { opacity: 0; transform: translateY(-10px); }
+}
+
+/* ===== ゴール演出 ===== */
+#goal-celebration {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 0;
+}
+
+#goal-celebration.flash-blue {
+  animation: celebFlashBlue 1.5s ease-out forwards;
+}
+
+#goal-celebration.flash-yellow {
+  animation: celebFlashYellow 1.5s ease-out forwards;
+}
+
+@keyframes celebFlashBlue {
+  0%   { box-shadow: inset 0 0 0 6px rgba(56, 139, 253, 0.9),
+                     inset 0 0 80px rgba(56, 139, 253, 0.5); opacity: 1; }
+  40%  { box-shadow: inset 0 0 0 12px rgba(56, 139, 253, 0.8),
+                     inset 0 0 160px rgba(56, 139, 253, 0.4); }
+  100% { box-shadow: inset 0 0 0 0px rgba(56, 139, 253, 0),
+                     inset 0 0 0px rgba(56, 139, 253, 0); opacity: 0; }
+}
+
+@keyframes celebFlashYellow {
+  0%   { box-shadow: inset 0 0 0 6px rgba(255, 215, 0, 0.9),
+                     inset 0 0 80px rgba(255, 215, 0, 0.5); opacity: 1; }
+  40%  { box-shadow: inset 0 0 0 12px rgba(255, 215, 0, 0.8),
+                     inset 0 0 160px rgba(255, 215, 0, 0.4); }
+  100% { box-shadow: inset 0 0 0 0px rgba(255, 215, 0, 0),
+                     inset 0 0 0px rgba(255, 215, 0, 0); opacity: 0; }
+}
+
+#goal-celebration.hidden {
+  display: none;
 }

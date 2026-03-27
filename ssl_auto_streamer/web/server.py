@@ -207,6 +207,8 @@ class WebServer:
         ball = self._safe_call(self._writer.get_ball_trajectory_data)
         robots_summary = self._safe_call(self._writer.get_all_robots_summary_data)
         field_snapshot = self._safe_call(self._writer.get_field_snapshot_data)
+        match_stats = self._safe_call(self._writer.get_match_stats_data)
+        cards = self._safe_call(self._writer.get_team_cards_and_fouls_data)
 
         team_info = self._build_team_info()
         pipeline_snapshot = None
@@ -218,6 +220,8 @@ class WebServer:
             "ball": ball,
             "robots_summary": robots_summary,
             "field_snapshot": field_snapshot,
+            "match_stats": match_stats,
+            "cards": cards,
             "status": self._build_status_dict(),
             "commentary_history": list(self._commentary_history),
             "event_log": list(self._event_log),
