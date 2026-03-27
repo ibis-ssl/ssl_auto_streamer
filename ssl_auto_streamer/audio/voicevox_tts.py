@@ -6,6 +6,7 @@
 
 """VOICEVOX TTS wrapper for local text-to-speech synthesis via HTTP API."""
 
+import asyncio
 import logging
 import re
 import struct
@@ -81,13 +82,19 @@ class VoicevoxTTS:
             pos += 8 + chunk_size
         return wav_data[44:]
 
-    async def synthesize_stream(self, text: str) -> AsyncGenerator[bytes, None]:
+    async def synthesize_stream(
+        self,
+        text: str,
+        cancel_event: Optional[asyncio.Event] = None,
+    ) -> AsyncGenerator[bytes, None]:
         """Generate PCM audio chunks from text, one chunk per sentence."""
         if not text.strip():
             return
 
         session = await self._get_session()
         for chunk_text in self._split_text(text):
+            if cancel_event and cancel_event.is_set():
+                return
             try:
                 async with session.post(
                     f"{self._host}/audio_query",
