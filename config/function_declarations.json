@@ -46,7 +46,7 @@
   },
   {
     "name": "get_all_robots_summary",
-    "description": "全ロボットの概要を取得する。各チームのアクティブロボット数、ゴールキーパーID、各ロボットの位置ゾーン、陣形サマリーを含む。",
+    "description": "全ロボットの概要を取得する。各チームのアクティブロボット数、ゴールキーパーID、各ロボットの位置ゾーンを含む。",
     "parameters": {
       "type": "object",
       "properties": {
@@ -103,8 +103,8 @@
       "properties": {
         "analysis_type": {
           "type": "string",
-          "enum": ["tactical", "momentum", "player_spotlight", "match_prediction", "halftime_summary"],
-          "description": "tactical=戦術分析, momentum=流れ分析, player_spotlight=注目ロボット, match_prediction=展開予測, halftime_summary=ハーフタイム総括"
+          "enum": ["momentum", "player_spotlight", "match_prediction", "halftime_summary"],
+          "description": "momentum=流れ分析, player_spotlight=注目ロボット, match_prediction=展開予測, halftime_summary=ハーフタイム総括"
         },
         "context": {
           "type": "string",

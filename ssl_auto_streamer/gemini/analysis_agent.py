@@ -23,13 +23,6 @@ logger = logging.getLogger(__name__)
 
 # 分析タイプごとのプロンプトテンプレート
 _PROMPT_TEMPLATES: Dict[str, str] = {
-    "tactical": (
-        "あなたはRoboCup Small Size League（SSL）の戦術アナリストです。"
-        "以下の初期データをもとに、必要であれば追加でツールを呼び出してデータを補完し、"
-        "現在の両チームの戦術的配置・意図・課題を2〜4文で分析してください。"
-        "実況者が読み上げることを前提に、断定的で自然な日本語で記述してください。\n\n"
-        "{data}"
-    ),
     "momentum": (
         "あなたはRoboCup Small Size League（SSL）の実況解説者です。"
         "以下の初期データをもとに、必要であれば追加でツールを呼び出してデータを補完し、"
@@ -133,11 +126,6 @@ class AnalysisAgent:
     def _collect_initial_data(self, analysis_type: str) -> Dict[str, Any]:
         """分析タイプに応じて WorldModelWriter から初期データを収集する。"""
         collectors = {
-            "tactical": lambda: {
-                "game_state": self._writer.get_game_state_data(),
-                "robots": self._writer.get_all_robots_summary_data("all"),
-                "stats": self._writer.get_match_stats_data(),
-            },
             "momentum": lambda: {
                 "game_state": self._writer.get_game_state_data(),
                 "recent_events": self._writer.get_event_history_data(10),
@@ -175,7 +163,7 @@ class AnalysisAgent:
         self, analysis_type: str, data: Dict[str, Any], context: Optional[str]
     ) -> str:
         """プロンプトを構築する。"""
-        template = _PROMPT_TEMPLATES.get(analysis_type, _PROMPT_TEMPLATES["tactical"])
+        template = _PROMPT_TEMPLATES.get(analysis_type, _PROMPT_TEMPLATES["momentum"])
         context_hint = f"着目点: {context}\n" if context else ""
         data_str = json.dumps(data, ensure_ascii=False, indent=2)
 
@@ -259,7 +247,6 @@ class AnalysisAgent:
         score_yellow = score.get("yellow", "?")
 
         messages = {
-            "tactical": f"現在のスコアは青{score_blue}対黄{score_yellow}。両チームともポジション取りに注力している。",
             "momentum": f"スコア青{score_blue}対黄{score_yellow}で試合は続いている。",
             "player_spotlight": "各ロボットがそれぞれの役割を果たしている。",
             "match_prediction": f"スコア青{score_blue}対黄{score_yellow}。このまま終盤まで接戦が続くか。",

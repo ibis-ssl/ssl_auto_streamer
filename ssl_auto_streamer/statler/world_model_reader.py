@@ -210,8 +210,8 @@ class WorldModelReader:
         "shot_analysis": "直前のシュートを分析する。コース、速度、キーパーの反応を整理して伝える。",
         "save_highlight": "直前のセーブを分析する。反応速度やポジショニングを具体的に伝える。",
         "game_summary": "ここまでの試合を総括する。スコア、主要なハイライト、両チームの戦い方を分析する。",
-        "team_introduction": "両チームの特徴と布陣を紹介する。注目点を簡潔に伝える。",
-        "tactical_analysis": "現在の戦術的状況を分析する。布陣、数的優位、攻撃パターンを整理して伝える。",
+        "team_introduction": "両チームの特徴を紹介する。注目点を簡潔に伝える。",
+        "tactical_analysis": "現在の戦術的状況を分析する。数的優位、攻撃パターンを整理して伝える。",
     }
 
     def _determine_analysis_type(self, context: GameContext, highlights: list) -> str:

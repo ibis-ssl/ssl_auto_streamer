@@ -33,7 +33,7 @@ class FunctionHandler:
         if name == "request_analysis":
             if self._analysis_agent is None:
                 return {"error": "AnalysisAgent is not configured"}
-            analysis_type = args.get("analysis_type", "tactical")
+            analysis_type = args.get("analysis_type", "momentum")
             context = args.get("context")
             return await self._analysis_agent.analyze(analysis_type, context)
         return self.handle(name, args)

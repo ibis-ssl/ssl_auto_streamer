@@ -805,13 +805,10 @@ class WorldModelWriter:
             zone = self._get_position_zone(robot.position[0])
             robots_info.append({"id": robot.robot_id, "role": role, "position_zone": zone})
 
-        formation = self._determine_formation(active_robots, goalie_id)
-
         return {
             "active_count": len(active_robots),
             "goalkeeper_id": goalie_id,
             "robots": robots_info,
-            "formation_summary": formation,
         }
 
     def _get_position_zone(self, x: float) -> str:
@@ -827,27 +824,6 @@ class WorldModelWriter:
             return "attack"
         else:
             return "opponent_goal_area"
-
-    def _determine_formation(self, robots: List[RobotSnapshot], goalie_id: int) -> str:
-        zones = {"defense": 0, "midfield": 0, "attack": 0}
-        for robot in robots:
-            if robot.robot_id == goalie_id:
-                continue
-            x = robot.position[0]
-            if x < -2.0:
-                zones["defense"] += 1
-            elif x < 2.0:
-                zones["midfield"] += 1
-            else:
-                zones["attack"] += 1
-
-        d, m, a = zones["defense"], zones["midfield"], zones["attack"]
-        if d >= 3:
-            return f"{d}-{m}-{a}（守備的布陣）"
-        elif a >= 3:
-            return f"{d}-{m}-{a}（攻撃的布陣）"
-        else:
-            return f"{d}-{m}-{a}（バランス型）"
 
     def _build_highlight_detail(
         self, highlight: HighlightEvent, now: datetime
