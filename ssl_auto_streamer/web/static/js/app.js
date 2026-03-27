@@ -8,6 +8,7 @@ let wsClient = null;
 let lastState = null;
 const soundManager = new SoundManager();
 let streamingActive = false;
+let _lastSpeakingText = '';
 
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
@@ -349,6 +350,13 @@ function updatePipelineSnapshot(snapshot) {
   const currentEl = document.getElementById('pipeline-current');
   const pendingEl = document.getElementById('pipeline-pending');
   if (!currentEl || !pendingEl) return;
+
+  const speakingText = snapshot?.current_speaking?.text || '';
+  if (speakingText !== _lastSpeakingText) {
+    _lastSpeakingText = speakingText;
+    document.getElementById('speaking-banner-text').textContent = speakingText;
+    document.getElementById('speaking-banner').classList.toggle('hidden', !speakingText);
+  }
 
   // 読み上げ中 / 合成中
   if (snapshot?.current_speaking) {

@@ -351,6 +351,50 @@ main {
 
 .status-label { color: var(--md-sys-color-on-surface-variant); }
 
+/* ===== Speaking Banner ===== */
+.speaking-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px;
+  background: var(--md-sys-color-surface-container-low);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  flex-shrink: 0;
+  overflow: hidden;
+  transition:
+    max-height var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
+    padding var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
+    opacity var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
+  max-height: 120px;
+  opacity: 1;
+}
+
+.speaking-banner.hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  border-bottom-color: transparent;
+}
+
+.speaking-banner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--md-sys-color-tertiary);
+  flex-shrink: 0;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+#speaking-banner-text {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--md-sys-color-on-surface);
+  letter-spacing: 0.01em;
+  word-break: break-word;
+}
+
 /* ===== Main Area (Field + Right column) ===== */
 #main-area {
   flex: 1;
