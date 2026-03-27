@@ -950,8 +950,8 @@ select option {
   border-radius: 9999px;
   cursor: pointer;
   transition:
-    background 300ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    border-color 300ms cubic-bezier(0.05, 0.7, 0.1, 1);
+    background var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
+    border-color var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel);
 }
 
 .slider::before {
@@ -965,10 +965,10 @@ select option {
   border-radius: 50%;
   background: var(--md-sys-color-outline);
   transition:
-    transform 300ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    width 300ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    height 300ms cubic-bezier(0.05, 0.7, 0.1, 1),
-    background 300ms cubic-bezier(0.05, 0.7, 0.1, 1);
+    transform var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
+    width var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
+    height var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
+    background var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel);
 }
 
 .switch input:checked + .slider {
