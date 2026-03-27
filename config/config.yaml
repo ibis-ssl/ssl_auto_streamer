@@ -4,6 +4,10 @@ analysis_agent:
   model: gemini-3-flash-preview
   temperature: 0.7
   timeout_seconds: 8
+reading_manager:
+  model: gemini-3.1-flash-lite-preview  # 読み上げ選別用の軽量モデル
+  timeout_seconds: 3
+  max_recently_spoken: 5  # 重複回避のために記憶する直近発話数
 audio:
   device: ''
 commentary:

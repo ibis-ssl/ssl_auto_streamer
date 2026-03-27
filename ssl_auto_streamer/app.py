@@ -23,9 +23,9 @@ from ssl_auto_streamer.data import (
 from ssl_auto_streamer.statler import WorldModelWriter, WorldModelReader
 from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
-from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent, ThinkingLevel, TextCommentaryClient
+from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent, ThinkingLevel, TextCommentaryClient, ReadingManager
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
-from ssl_auto_streamer.audio import PcmAudioOutput, VoicevoxTTS
+from ssl_auto_streamer.audio import PcmAudioOutput, VoicevoxTTS, UtteranceQueue, GameCommandAnnouncer, GAME_COMMAND_TYPES
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
 from ssl_auto_streamer.ssl.tracker_client import TrackerClient
 from ssl_auto_streamer.ssl.gc_client import GCClient
@@ -53,6 +53,8 @@ class CommentaryApp:
 
         self._initial_context_sent: bool = False
         self._tts_buffer: str = ""
+        self._current_event_priority: int = 1
+        self._current_event_type: Optional[str] = None
 
         # Config file directory
         self._config_dir = Path(__file__).parent.parent / "config"
@@ -134,14 +136,34 @@ class CommentaryApp:
             device=audio_device,
         )
 
-        # VOICEVOX TTS (text mode only)
+        # VOICEVOX TTS と ReadingManager / UtteranceQueue (text mode only)
         self._tts: Optional[VoicevoxTTS] = None
+        self._reading_manager: Optional[ReadingManager] = None
+        self._utterance_queue: Optional[UtteranceQueue] = None
+        self._command_announcer: Optional[GameCommandAnnouncer] = None
         if response_mode == "text":
             voicevox_cfg = config.get("voicevox", {})
             self._tts = VoicevoxTTS(
                 host=voicevox_cfg.get("host", "http://localhost:50021"),
                 speaker=int(voicevox_cfg.get("speaker", 3)),
                 speed_scale=float(voicevox_cfg.get("speed_scale", 1.0)),
+            )
+            rm_cfg = config.get("reading_manager", {})
+            self._reading_manager = ReadingManager(
+                api_key=api_key,
+                model=rm_cfg.get("model", "gemini-3.1-flash-lite-preview"),
+                timeout_seconds=float(rm_cfg.get("timeout_seconds", 3.0)),
+            )
+            self._utterance_queue = UtteranceQueue(
+                tts=self._tts,
+                audio_output=self._audio_output,
+                reading_manager=self._reading_manager,
+                writer=self._writer,
+                max_recently_spoken=int(rm_cfg.get("max_recently_spoken", 5)),
+            )
+            self._command_announcer = GameCommandAnnouncer(
+                tts=self._tts,
+                audio_output=self._audio_output,
             )
 
         # SSL clients
@@ -249,6 +271,10 @@ class CommentaryApp:
         # Start AnalysisAgent
         await self._analysis_agent.start()
 
+        # Start ReadingManager
+        if self._reading_manager:
+            await self._reading_manager.start()
+
         # Start web server
         if self._web_server:
             try:
@@ -296,6 +322,10 @@ class CommentaryApp:
             self._connected = True
             self._streaming = True
             self._audio_output.start()
+            if self._utterance_queue:
+                self._utterance_queue.start()
+            if self._command_announcer:
+                self._fire_and_forget(self._command_announcer.presynthesize())
             logger.info("Connected to Gemini API, audio started")
             await self._send_initial_context()
             blue_name, yellow_name = self._writer.get_team_names()
@@ -327,6 +357,8 @@ class CommentaryApp:
         if self._gemini_client.is_connected():
             await self._gemini_client.disconnect()
 
+        if self._utterance_queue:
+            await self._utterance_queue.stop()
         self._audio_output.stop()
         self._initial_context_sent = False
         self._reconnect_attempts = 0
@@ -344,9 +376,13 @@ class CommentaryApp:
         if self._connected:
             await self._gemini_client.disconnect()
 
+        if self._utterance_queue:
+            await self._utterance_queue.stop()
         self._audio_output.stop()
         if self._tts:
             await self._tts.close()
+        if self._reading_manager:
+            await self._reading_manager.close()
         await self._analysis_agent.close()
 
         if self._web_server:
@@ -437,13 +473,31 @@ class CommentaryApp:
         request = self._reader.generate_reflex(event.event_type, event_data)
 
         if request.priority >= 1:
-            # バージイン判定: 高優先度イベントまたはアナリストモード中なら音声バッファをクリア
-            if self._gemini_client.is_generating and (
+            self._current_event_priority = request.priority
+            self._current_event_type = event.event_type
+
+            if self._utterance_queue is not None:
+                if event.event_type in GAME_COMMAND_TYPES:
+                    # ゲームコマンドは常にキューをクリアして即座にプリ合成音声を再生
+                    self._tts_buffer = ""
+                    self._utterance_queue.clear()
+                    if self._command_announcer:
+                        self._command_announcer.play(event.event_type)
+                else:
+                    # 通常イベント: バージイン判定
+                    if (self._gemini_client.is_generating or self._utterance_queue.is_busy) and (
+                        request.priority >= self._interrupt_priority_threshold
+                        or prev_mode == CommentaryMode.ANALYST
+                    ):
+                        logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
+                        self._tts_buffer = ""
+                        self._utterance_queue.interrupt(request.priority)
+            elif self._gemini_client.is_generating and (
                 request.priority >= self._interrupt_priority_threshold
                 or prev_mode == CommentaryMode.ANALYST
             ):
+                # audio モード: PCM バッファを直接クリア
                 logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
-                self._tts_buffer = ""
                 self._audio_output.clear_buffer()
 
             json_payload = self._reader.to_gemini_json(request)
@@ -520,6 +574,8 @@ class CommentaryApp:
                 self._reconnect_attempts = 0
                 self._initial_context_sent = False
                 self._audio_output.start()
+                if self._utterance_queue:
+                    self._utterance_queue.start()
                 logger.info("Reconnected to Gemini API")
                 await self._send_initial_context()
             else:
@@ -536,11 +592,11 @@ class CommentaryApp:
         self._audio_output.play(pcm_data)
 
     def _on_text_received(self, text: str) -> None:
-        """Handle received text from Gemini (text mode). Accumulate and synthesize at sentence boundaries."""
+        """Handle received text from Gemini (text mode). Accumulate and enqueue at sentence boundaries."""
         if self._web_server:
             self._web_server.push_transcription(text)
 
-        if not self._tts:
+        if not self._utterance_queue:
             return
 
         self._tts_buffer += text
@@ -548,15 +604,12 @@ class CommentaryApp:
         if len(parts) > 1:
             for sentence in parts[:-1]:
                 if sentence.strip():
-                    self._fire_and_forget(self._synthesize_and_play(sentence))
+                    self._utterance_queue.enqueue(
+                        text=sentence,
+                        priority=self._current_event_priority,
+                        event_type=self._current_event_type,
+                    )
             self._tts_buffer = parts[-1]
-
-    async def _synthesize_and_play(self, text: str) -> None:
-        """Run VOICEVOX TTS on text and feed PCM to audio output."""
-        if not self._tts:
-            return
-        async for chunk in self._tts.synthesize_stream(text):
-            self._audio_output.play(chunk)
 
     def _on_transcription_received(self, text: str) -> None:
         """Handle output audio transcription from Gemini (audio mode)."""
@@ -568,11 +621,15 @@ class CommentaryApp:
         if self._response_mode == "audio":
             self._audio_output.flush_buffer()
         else:
-            # Flush remaining buffered text to TTS
+            # 残りバッファをキューに追加
             remaining = self._tts_buffer.strip()
             self._tts_buffer = ""
-            if remaining and self._tts:
-                self._fire_and_forget(self._synthesize_and_play(remaining))
+            if remaining and self._utterance_queue:
+                self._utterance_queue.enqueue(
+                    text=remaining,
+                    priority=self._current_event_priority,
+                    event_type=self._current_event_type,
+                )
 
     async def _send_initial_context(self) -> None:
         """Send SSL rules and team info as initial context."""
