@@ -53,7 +53,7 @@ class TextCommentaryClient:
         system_instruction: str = "",
         tools_config: Optional[List[Dict[str, Any]]] = None,
         temperature: float = 1.0,
-        max_output_tokens: int = 1024,
+        max_output_tokens: int = 256,
     ):
         self._api_key = api_key or os.environ.get("GEMINI_API_KEY", "")
         self._model = model
@@ -135,6 +135,9 @@ class TextCommentaryClient:
     async def send_text(self, text: str) -> None:
         if not self._connected:
             logger.warning("TextCommentaryClient not connected")
+            return
+        if self._is_generating:
+            logger.info("TextCommentaryClient: skipping send (already generating)")
             return
         task = asyncio.create_task(self._stream_request(text))
         self._pending_tasks.add(task)

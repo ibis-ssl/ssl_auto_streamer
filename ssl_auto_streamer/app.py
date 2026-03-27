@@ -121,6 +121,7 @@ class CommentaryApp:
                 model=gemini_cfg.get("text_model", "gemini-3.1-flash-lite"),
                 system_instruction=system_instruction,
                 tools_config=tools_config,
+                max_output_tokens=int(gemini_cfg.get("max_output_tokens", 256)),
             )
             self._gemini_client.set_text_callback(self._on_text_received)
 
@@ -161,6 +162,7 @@ class CommentaryApp:
                 reading_manager=self._reading_manager,
                 writer=self._writer,
                 max_recently_spoken=int(rm_cfg.get("max_recently_spoken", 5)),
+                max_speak_per_batch=int(rm_cfg.get("max_speak_per_batch", 3)),
             )
             self._command_announcer = GameCommandAnnouncer(
                 tts=self._tts,
@@ -191,6 +193,7 @@ class CommentaryApp:
         self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
         self._writer_update_rate = commentary_cfg.get("writer_update_rate", 1.0)
         self._interrupt_priority_threshold = commentary_cfg.get("interrupt_priority_threshold", 2)
+        self._backpressure_threshold = commentary_cfg.get("queue_backpressure_threshold", 5)
 
         # State
         self._connected = False
@@ -565,6 +568,16 @@ class CommentaryApp:
                 logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
                 self._audio_output.clear_buffer()
 
+            # バックプレッシャー: 低優先度で容量不足時はスキップ
+            if self._utterance_queue is not None and request.priority < self._interrupt_priority_threshold:
+                pending_count = self._utterance_queue.pending_count
+                if pending_count >= self._backpressure_threshold:
+                    logger.info(
+                        f"Skipping {event.event_type} commentary: "
+                        f"queue depth {pending_count} >= {self._backpressure_threshold}"
+                    )
+                    return
+
             json_payload = self._reader.to_gemini_json(request)
             logger.info(f"Sending reflex commentary for {event.event_type}")
             asyncio.create_task(self._send_reflex(json_payload, request.priority))
@@ -665,7 +678,7 @@ class CommentaryApp:
             return
 
         self._tts_buffer += text
-        parts = re.split(r'(?<=[。！？、\n])', self._tts_buffer)
+        parts = re.split(r'(?<=[。！？\n])', self._tts_buffer)
         if len(parts) > 1:
             for sentence in parts[:-1]:
                 if sentence.strip():

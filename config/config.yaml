@@ -10,8 +10,10 @@ commentary:
   analyst_silence_threshold: 5
   interrupt_priority_threshold: 2
   mode: reflex_analyst
+  queue_backpressure_threshold: 5
   writer_update_rate: 1
 gemini:
+  max_output_tokens: 256
   model: gemini-3.1-flash-live-preview
   output_transcription: true
   response_mode: text
@@ -20,6 +22,7 @@ gemini:
   thinking_level: medium
 reading_manager:
   max_recently_spoken: 5
+  max_speak_per_batch: 3
   model: gemini-3.1-flash-lite-preview
   timeout_seconds: 3
 ssl:

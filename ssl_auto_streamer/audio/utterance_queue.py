@@ -35,11 +35,15 @@ class UtteranceQueue:
         reading_manager: ReadingManager,
         writer: Any,  # WorldModelWriter
         max_recently_spoken: int = 5,
+        max_pending: int = 10,
+        max_speak_per_batch: int = 3,
     ):
         self._tts = tts
         self._audio_output = audio_output
         self._reading_manager = reading_manager
         self._writer = writer
+        self._max_pending = max_pending
+        self._max_speak_per_batch = max_speak_per_batch
 
         self._pending: List[Utterance] = []
         self._pending_event = asyncio.Event()
@@ -57,6 +61,11 @@ class UtteranceQueue:
     def is_busy(self) -> bool:
         """発話キューが処理中（ペンディングあり or 合成中）かどうか。"""
         return bool(self._pending) or self._is_synthesizing
+
+    @property
+    def pending_count(self) -> int:
+        """現在ペンディング中の発話数。"""
+        return len(self._pending)
 
     def set_pipeline_callback(
         self, callback: Callable[[str, Dict[str, Any]], None]
@@ -111,7 +120,21 @@ class UtteranceQueue:
         logger.info("UtteranceQueue worker stopped")
 
     def enqueue(self, text: str, priority: int, event_type: Optional[str] = None) -> None:
-        """発話候補をキューに追加する。"""
+        """発話候補をキューに追加する。上限超過時は最古の低優先度アイテムを破棄する。"""
+        if len(self._pending) >= self._max_pending:
+            drop_idx, dropped = min(enumerate(self._pending), key=lambda x: x[1].priority)
+            self._pending.pop(drop_idx)
+            logger.warning(
+                f"UtteranceQueue overflow (max={self._max_pending}): "
+                f"dropped utt_id={dropped.id} '{dropped.text[:20]}'"
+            )
+            self._emit("discard", {
+                "id": dropped.id,
+                "text": dropped.text,
+                "candidates": self._max_pending,
+                "reason": "queue_overflow",
+            })
+
         self._id_counter += 1
         utt = Utterance(text=text, priority=priority, event_type=event_type, id=self._id_counter)
         self._pending.append(utt)
@@ -172,15 +195,18 @@ class UtteranceQueue:
             candidates = list(self._pending)
             self._pending.clear()
 
-            if len(candidates) == 1:
+            if len(candidates) <= self._max_speak_per_batch:
+                # バッチ上限以内なら全件再生可能 — ReadingManagerの3秒遅延を省略
                 selected = candidates
-                self._emit("select", {
-                    "id": candidates[0].id,
-                    "text": candidates[0].text,
-                    "candidates": 1,
-                    "selected": 1,
-                    "select_method": "direct",
-                })
+                num = len(candidates)
+                for u in candidates:
+                    self._emit("select", {
+                        "id": u.id,
+                        "text": u.text,
+                        "candidates": num,
+                        "selected": num,
+                        "select_method": "direct",
+                    })
             else:
                 game_context = self._build_game_context()
                 recently = list(self._recently_spoken)
@@ -218,6 +244,17 @@ class UtteranceQueue:
                             "reason": "reading_manager",
                         })
 
+            # バッチ上限を適用: 超過分は破棄して最新のpendingを優先する
+            if len(selected) > self._max_speak_per_batch:
+                for utt in selected[self._max_speak_per_batch:]:
+                    self._emit("discard", {
+                        "id": utt.id,
+                        "text": utt.text,
+                        "candidates": len(selected),
+                        "reason": "batch_limit",
+                    })
+                selected = selected[:self._max_speak_per_batch]
+
             self._cancel_event.clear()
             self._is_synthesizing = True
             try:
@@ -226,6 +263,15 @@ class UtteranceQueue:
                         logger.debug("UtteranceQueue: synthesis cancelled")
                         self._emit("cancel", {"id": utt.id, "text": utt.text})
                         break
+                    # 再生前に新しいpendingがあれば残りを破棄してバッチ中断
+                    if self._pending:
+                        self._emit("discard", {
+                            "id": utt.id,
+                            "text": utt.text,
+                            "candidates": len(selected),
+                            "reason": "preempted_by_new",
+                        })
+                        continue
                     self._current_speaking = utt
                     self._emit("speak_start", {"id": utt.id, "text": utt.text})
                     await self._synthesize_and_play(utt)

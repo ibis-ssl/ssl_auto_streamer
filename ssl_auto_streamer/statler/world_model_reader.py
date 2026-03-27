@@ -121,7 +121,7 @@ class WorldModelReader:
         priority = 1
         if event_type in ["GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY"]:
             priority = 2
-        elif event_type in ["BALL_OUT", "BALL_PLACEMENT"]:
+        elif event_type in ["BALL_OUT"]:
             priority = 0
 
         return CommentaryRequest(
