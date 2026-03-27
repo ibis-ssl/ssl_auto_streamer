@@ -84,6 +84,26 @@ class WorldModelReader:
                 "instruction": "セットプレーの種類（フリーキック/キックオフ/PK等）とどちらのチームかを伝える。",
                 "suggested_function": "get_game_state",
             },
+            "KICKOFF": {
+                "hint": "キックオフです。",
+                "instruction": "キックオフを行うチームを伝える。前半・後半の文脈があれば言及する。",
+                "suggested_function": "get_game_state",
+            },
+            "PENALTY": {
+                "hint": "ペナルティーキックです。",
+                "instruction": "PKを行うチームと相手チームを伝える。緊張感のある状況を短く表現する。",
+                "suggested_function": "get_game_state",
+            },
+            "FREE_KICK": {
+                "hint": "フリーキックです。",
+                "instruction": "フリーキックを行うチームを伝える。インダイレクトの場合は直接ゴールを狙えない点を補足する。",
+                "suggested_function": "get_game_state",
+            },
+            "BALL_PLACEMENT": {
+                "hint": "ボールプレイスメントです。",
+                "instruction": "ボールプレイスメントを行うチームを伝える。",
+                "suggested_function": "get_game_state",
+            },
             "FOUL": {
                 "hint": "ファールです。",
                 "instruction": "ファールの種類名と違反内容を具体的に説明する。数値がある場合は日本語で読み上げる。",
@@ -104,9 +124,9 @@ class WorldModelReader:
         context = self._writer.get_context()
 
         priority = 1
-        if event_type in ["GOAL", "FAST_SHOT", "SAVE", "FOUL"]:
+        if event_type in ["GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY"]:
             priority = 2
-        elif event_type in ["POSSESSION_CHANGE", "BALL_OUT"]:
+        elif event_type in ["POSSESSION_CHANGE", "BALL_OUT", "BALL_PLACEMENT"]:
             priority = 0
 
         return CommentaryRequest(

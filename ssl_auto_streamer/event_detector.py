@@ -53,6 +53,23 @@ _GC_EVENT_MAP = {
     "BOT_TIPPED_OVER": "FOUL",
 }
 
+# Referee command → (event_type, team, extra_metadata) mapping.
+# Each command comes in a yellow/blue pair; team is encoded per entry.
+_TEAM_COMMAND_MAP = {
+    4:  ("KICKOFF",        "yellow", {}),
+    5:  ("KICKOFF",        "blue",   {}),
+    6:  ("PENALTY",        "yellow", {}),
+    7:  ("PENALTY",        "blue",   {}),
+    8:  ("FREE_KICK",      "yellow", {"indirect": False}),
+    9:  ("FREE_KICK",      "blue",   {"indirect": False}),
+    10: ("FREE_KICK",      "yellow", {"indirect": True}),
+    11: ("FREE_KICK",      "blue",   {"indirect": True}),
+    12: ("TIMEOUT",        "yellow", {}),
+    13: ("TIMEOUT",        "blue",   {}),
+    16: ("BALL_PLACEMENT", "yellow", {}),
+    17: ("BALL_PLACEMENT", "blue",   {}),
+}
+
 # Thresholds for Tracker heuristics
 _SHOT_SPEED_THRESHOLD = 6.0       # m/s
 _PASS_SPEED_THRESHOLD = 1.0       # m/s
@@ -294,7 +311,6 @@ class EventDetector:
         self, old_cmd: int, new_cmd: int
     ) -> Optional[DetectedEvent]:
         """Detect play state changes from Referee command transitions."""
-        # HALT (0)
         if new_cmd == 0:
             return DetectedEvent(
                 event_type="HALT",
@@ -302,7 +318,6 @@ class EventDetector:
                 ball_speed=0.0,
                 confidence=1.0,
             )
-        # STOP (1)
         if new_cmd == 1:
             return DetectedEvent(
                 event_type="STOP",
@@ -310,7 +325,7 @@ class EventDetector:
                 ball_speed=0.0,
                 confidence=1.0,
             )
-        # NORMAL_START/FORCE_START after STOP/HALT → INPLAY_START
+        # NORMAL_START/FORCE_START after any non-inplay state → INPLAY_START
         if new_cmd in (2, 3) and old_cmd in (0, 1, 4, 5, 6, 7, 8, 9, 10, 11):
             return DetectedEvent(
                 event_type="INPLAY_START",
@@ -318,13 +333,16 @@ class EventDetector:
                 ball_speed=0.0,
                 confidence=1.0,
             )
-        # Timeout
-        if new_cmd in (12, 13):
+        # Team-based commands (kickoff, penalty, free kick, timeout, ball placement)
+        entry = _TEAM_COMMAND_MAP.get(new_cmd)
+        if entry:
+            event_type, team, extra = entry
             return DetectedEvent(
-                event_type="TIMEOUT",
+                event_type=event_type,
                 position=self._last_ball_pos,
                 ball_speed=0.0,
                 confidence=1.0,
+                metadata={"team": team, **extra},
             )
         return None
 

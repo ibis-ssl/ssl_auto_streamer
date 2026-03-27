@@ -239,6 +239,10 @@ class CommentaryApp:
             "GAME_END": 10.0,
             "FOUL": 5.0,
             "COLLISION": 4.0,
+            "KICKOFF": 5.0,
+            "PENALTY": 5.0,
+            "FREE_KICK": 3.0,
+            "BALL_PLACEMENT": 5.0,
         }
 
     def _load_yaml(self, filename: str) -> Optional[Dict]:

@@ -24,6 +24,10 @@ _COMMAND_PHRASES: Dict[str, str] = {
     "TIMEOUT": "タイムアウトです。",
     "HALF_TIME": "前半終了です。",
     "GAME_END": "試合終了です。",
+    "KICKOFF": "キックオフです。",
+    "PENALTY": "ペナルティーキックです。",
+    "FREE_KICK": "フリーキックです。",
+    "BALL_PLACEMENT": "ボールプレイスメントです。",
 }
 
 GAME_COMMAND_TYPES = frozenset(_COMMAND_PHRASES.keys())
