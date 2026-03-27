@@ -125,6 +125,12 @@ class WebServer:
             json.dumps({"type": "commentary", **entry}, ensure_ascii=False)
         ))
 
+    def push_transcription(self, text: str) -> None:
+        """Push output audio transcription to connected clients."""
+        self._fire_and_forget(self._broadcast(
+            json.dumps({"type": "transcription", "text": text, "timestamp": time.time()}, ensure_ascii=False)
+        ))
+
     def update_tracker_seen(self) -> None:
         """Mark that a tracker frame was received."""
         self._tracker_last_seen = time.time()

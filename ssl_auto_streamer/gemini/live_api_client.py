@@ -7,13 +7,14 @@
 """Gemini Multimodal Live API Client for real-time audio commentary."""
 
 import asyncio
+import base64
 import inspect
 import json
 import logging
 import os
-from typing import Callable, Optional, Dict, Any, List
+import time
 from dataclasses import dataclass, field
-import base64
+from typing import Callable, Optional, Dict, Any, List
 
 try:
     import websockets
@@ -32,11 +33,13 @@ class GeminiConfig:
     """Configuration for Gemini Live API."""
 
     api_key: str = ""
-    model: str = "gemini-2.0-flash-exp"
+    model: str = "gemini-3.1-flash-live-preview"
     sample_rate: int = 24000
     voice: str = "Aoede"
     system_instruction: str = ""
     tools_config: List[Dict[str, Any]] = field(default_factory=list)
+    thinking_level: str = "medium"  # minimal / low / medium / high
+    output_transcription: bool = True
 
 
 class GeminiLiveApiClient:
@@ -62,6 +65,8 @@ class GeminiLiveApiClient:
         self._receive_task: Optional[asyncio.Task] = None
         self._on_disconnect_callback: Optional[Callable[[], None]] = None
         self._turn_complete_callback: Optional[Callable[[], None]] = None
+        self._transcription_callback: Optional[Callable[[str], None]] = None
+        self._session_start_time: float = 0.0
 
         self._ws_url = (
             f"wss://generativelanguage.googleapis.com/ws/"
@@ -74,6 +79,16 @@ class GeminiLiveApiClient:
 
     def set_turn_complete_callback(self, callback: Callable[[], None]) -> None:
         self._turn_complete_callback = callback
+
+    def set_transcription_callback(self, callback: Callable[[str], None]) -> None:
+        self._transcription_callback = callback
+
+    @property
+    def session_age(self) -> float:
+        """Returns the number of seconds since the current session was established."""
+        if self._session_start_time == 0.0:
+            return 0.0
+        return time.time() - self._session_start_time
 
     async def connect(self) -> bool:
         """Establish WebSocket connection to Gemini API."""
@@ -102,19 +117,26 @@ class GeminiLiveApiClient:
         try:
             self._ws = await websockets.connect(self._ws_url)
 
+            generation_config: Dict[str, Any] = {
+                "response_modalities": ["AUDIO"],
+                "speech_config": {
+                    "voice_config": {
+                        "prebuilt_voice_config": {
+                            "voice_name": self._config.voice
+                        }
+                    }
+                },
+                "thinking_config": {
+                    "thinkingLevel": self._config.thinking_level,
+                },
+            }
+            if self._config.output_transcription:
+                generation_config["output_audio_transcription"] = {}
+
             setup_msg = {
                 "setup": {
                     "model": f"models/{self._config.model}",
-                    "generation_config": {
-                        "response_modalities": ["AUDIO"],
-                        "speech_config": {
-                            "voice_config": {
-                                "prebuilt_voice_config": {
-                                    "voice_name": self._config.voice
-                                }
-                            }
-                        },
-                    },
+                    "generation_config": generation_config,
                     "system_instruction": {
                         "parts": [{"text": self._config.system_instruction}]
                     },
@@ -134,6 +156,7 @@ class GeminiLiveApiClient:
             if "setupComplete" in response_data:
                 self._connected = True
                 self._is_generating = False
+                self._session_start_time = time.time()
                 logger.info("Connected to Gemini Live API")
                 self._receive_task = asyncio.create_task(self._receive_loop())
                 return True
@@ -159,6 +182,7 @@ class GeminiLiveApiClient:
 
         self._connected = False
         self._is_generating = False
+        self._session_start_time = 0.0
         logger.info("Disconnected from Gemini Live API")
 
     def is_connected(self) -> bool:
@@ -262,6 +286,14 @@ class GeminiLiveApiClient:
                                         f"Received audio: {len(audio_bytes)} bytes"
                                     )
                                     self._audio_callback(audio_bytes)
+
+            # 出力音声の文字起こし (gemini-3.1以降)
+            if "outputTranscription" in server_content:
+                transcription = server_content["outputTranscription"]
+                text = transcription.get("text", "")
+                if text and self._transcription_callback:
+                    logger.debug(f"Transcription: {text}")
+                    self._transcription_callback(text)
 
             if server_content.get("turnComplete"):
                 logger.debug("Turn complete")

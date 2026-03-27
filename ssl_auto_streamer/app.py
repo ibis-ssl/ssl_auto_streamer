@@ -95,16 +95,19 @@ class CommentaryApp:
         api_key = gemini_cfg.get("api_key") or os.environ.get("GEMINI_API_KEY", "")
         gemini_config = GeminiConfig(
             api_key=api_key,
-            model=gemini_cfg.get("model", "gemini-2.0-flash-exp"),
+            model=gemini_cfg.get("model", "gemini-3.1-flash-live-preview"),
             sample_rate=gemini_cfg.get("sample_rate", 24000),
             system_instruction=system_instruction,
             tools_config=tools_config,
+            thinking_level=gemini_cfg.get("thinking_level", "medium"),
+            output_transcription=gemini_cfg.get("output_transcription", True),
         )
         self._gemini_client = GeminiLiveApiClient(gemini_config)
         self._gemini_client.set_audio_callback(self._on_audio_received)
         self._gemini_client.set_function_call_handler(self._function_handler.handle_async)
         self._gemini_client.set_disconnect_callback(self._on_gemini_disconnected)
         self._gemini_client.set_turn_complete_callback(self._on_turn_complete)
+        self._gemini_client.set_transcription_callback(self._on_transcription_received)
 
         # Audio output
         sample_rate = gemini_cfg.get("sample_rate", 24000)
@@ -138,6 +141,8 @@ class CommentaryApp:
         self._reconnect_attempts = 0
         self._max_reconnect_attempts = 10
         self._next_reconnect_time: float = 0.0
+        # gemini-3.1 audio sessions expire at 15 min; refresh 2 min early to avoid mid-match drops
+        self._session_refresh_threshold: float = 13 * 60
         self._running = False
         self._pending_tasks: set = set()
 
@@ -454,6 +459,11 @@ class CommentaryApp:
 
             if self._connected:
                 self._reconnect_attempts = 0
+                if self._gemini_client.session_age > self._session_refresh_threshold:
+                    logger.info("Session approaching 15-min limit, refreshing connection...")
+                    await self._gemini_client.disconnect()
+                    self._connected = False
+                    self._initial_context_sent = False
                 continue
 
             if self._reconnect_attempts >= self._max_reconnect_attempts:
@@ -492,6 +502,11 @@ class CommentaryApp:
     def _on_audio_received(self, pcm_data: bytes) -> None:
         """Handle received audio from Gemini."""
         self._audio_output.play(pcm_data)
+
+    def _on_transcription_received(self, text: str) -> None:
+        """Handle output audio transcription from Gemini."""
+        if self._web_server:
+            self._web_server.push_transcription(text)
 
     def _on_turn_complete(self) -> None:
         """Flush tail audio when Gemini signals end of turn."""

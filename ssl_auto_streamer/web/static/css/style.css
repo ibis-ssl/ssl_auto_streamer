@@ -734,3 +734,14 @@ select option {
   display: inline-block;
   vertical-align: middle;
 }
+
+/* ===== Transcription (live subtitle) ===== */
+.transcription-text {
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 2.5em;
+  color: var(--md-sys-color-on-surface);
+  padding: 4px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

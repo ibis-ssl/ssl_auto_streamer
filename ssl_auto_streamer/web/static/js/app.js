@@ -148,6 +148,8 @@ function handleMessage(msg) {
     soundManager.playForEvent(msg.event_type);
   } else if (msg.type === 'commentary') {
     appendCommentary(msg);
+  } else if (msg.type === 'transcription') {
+    updateTranscription(msg.text);
   }
 }
 
@@ -305,6 +307,15 @@ function renderCommentaryHistory(history) {
 
 function appendCommentary(msg) {
   renderCommentaryHistory((lastState?.commentary_history || []).concat([msg]));
+}
+
+let _transcriptionClearTimer = null;
+function updateTranscription(text) {
+  const el = document.getElementById('transcription-text');
+  if (!el) return;
+  el.textContent = text;
+  if (_transcriptionClearTimer) clearTimeout(_transcriptionClearTimer);
+  _transcriptionClearTimer = setTimeout(() => { el.textContent = ''; }, 8000);
 }
 
 // ===== Utilities =====

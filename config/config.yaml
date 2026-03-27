@@ -13,8 +13,10 @@ commentary:
   writer_update_rate: 1
 gemini:
   api_key: ''
-  model: gemini-2.5-flash-native-audio-preview-12-2025
+  model: gemini-3.1-flash-live-preview
+  output_transcription: true
   sample_rate: 24000
+  thinking_level: medium
 ssl:
   gc_addr: 224.5.23.1
   gc_port: 10003
