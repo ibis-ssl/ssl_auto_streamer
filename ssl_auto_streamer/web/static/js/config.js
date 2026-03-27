@@ -19,10 +19,6 @@ function populateForm(cfg) {
   const gemini = cfg.gemini || {};
   const audio = cfg.audio || {};
 
-  setVal('cfg-tracker-addr', ssl.tracker_addr || '');
-  setVal('cfg-gc-addr', ssl.gc_addr || '');
-  setVal('cfg-vision-addr', ssl.vision_addr || '');
-
   setVal('cfg-silence-threshold', commentary.analyst_silence_threshold || '');
   setVal('cfg-update-rate', commentary.writer_update_rate || '');
 
@@ -41,11 +37,7 @@ async function applyConfig() {
   resultEl.style.display = 'none';
 
   const payload = {
-    ssl: {
-      tracker_addr: getVal('cfg-tracker-addr'),
-      gc_addr: getVal('cfg-gc-addr'),
-      vision_addr: getVal('cfg-vision-addr'),
-    },
+    ssl: {},
     commentary: {
       analyst_silence_threshold: parseFloat(getVal('cfg-silence-threshold')) || undefined,
       writer_update_rate: parseFloat(getVal('cfg-update-rate')) || undefined,

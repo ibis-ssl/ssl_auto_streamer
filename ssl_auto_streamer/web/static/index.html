@@ -31,148 +31,153 @@
   <!-- ===== Dashboard ===== -->
   <div id="dashboard" class="tab-content active">
 
-    <!-- Streaming Control -->
-    <div class="panel" id="streaming-control">
-      <button id="streaming-btn" class="btn btn-start">▶ 実況開始</button>
-      <span id="streaming-status" class="streaming-status-label">停止中</span>
-    </div>
+    <!-- Score Bar (streaming control + scoreboard + system status) -->
+    <div id="score-bar">
 
-    <!-- Scoreboard -->
-    <div class="panel" id="scoreboard">
-      <div class="panel-header">SCOREBOARD</div>
-      <div class="score-row">
+      <!-- Streaming control -->
+      <div id="streaming-section">
+        <button id="streaming-btn" class="btn btn-start">▶ 実況開始</button>
+        <span id="streaming-status" class="streaming-status-label">停止中</span>
+      </div>
+
+      <div class="score-bar-divider"></div>
+
+      <!-- Scoreboard -->
+      <div id="scoreboard">
         <div class="team-block">
-          <div class="team-name blue" id="team-name-blue">青チーム (Blue)</div>
+          <div class="team-name blue" id="team-name-blue">Blue</div>
           <div class="team-score" id="score-blue">-</div>
         </div>
         <div class="score-sep">VS</div>
         <div class="team-block">
-          <div class="team-name yellow" id="team-name-yellow">黄チーム (Yellow)</div>
+          <div class="team-name yellow" id="team-name-yellow">Yellow</div>
           <div class="team-score" id="score-yellow">-</div>
         </div>
       </div>
-      <div class="score-meta">
-        <span><span class="material-symbols-rounded">timer</span><span id="elapsed-time">00:00</span></span>
-        <span><span class="material-symbols-rounded">stadium</span><span id="play-situation">-</span></span>
-        <span><span class="material-symbols-rounded">trending_up</span><span id="momentum">-</span></span>
+
+      <div class="score-bar-divider"></div>
+
+      <!-- Game meta -->
+      <div id="score-meta-bar">
+        <span class="meta-item"><span class="material-symbols-rounded">timer</span><span id="elapsed-time">00:00</span></span>
+        <span class="meta-item"><span class="material-symbols-rounded">stadium</span><span id="play-situation">-</span></span>
+        <span class="meta-item"><span class="material-symbols-rounded">trending_up</span><span id="momentum">-</span></span>
       </div>
-    </div>
 
-    <!-- Field -->
-    <div class="panel" id="field-panel">
-      <div class="panel-header">フィールド</div>
-      <canvas id="field-canvas"></canvas>
-    </div>
+      <div class="score-bar-divider"></div>
 
-    <!-- Centre column: Pipeline + Commentary -->
-    <div id="center-col">
-
-      <!-- Transcription (live subtitle) -->
-      <div class="panel" id="transcription-panel">
-        <div class="panel-header">字幕 (文字起こし)</div>
-        <div class="panel-body">
-          <div id="transcription-text" class="transcription-text"></div>
+      <!-- System status (compact) -->
+      <div id="system-status-bar">
+        <div class="status-item" id="status-gemini">
+          <div class="status-dot ng"></div>
+          <span class="status-label">Gemini</span>
+        </div>
+        <div class="status-item" id="status-tracker">
+          <div class="status-dot ng"></div>
+          <span class="status-label">Tracker</span>
+        </div>
+        <div class="status-item" id="status-gc">
+          <div class="status-dot ng"></div>
+          <span class="status-label">GC</span>
         </div>
       </div>
 
-      <!-- Pipeline Monitor -->
-      <div class="panel flex-fill" id="pipeline-panel">
-        <div class="panel-header">実況パイプライン</div>
-        <div class="panel-body pipeline-body">
-          <div id="pipeline-current"></div>
-          <div id="pipeline-pending"></div>
-          <ul class="log-list" id="pipeline-log-list"></ul>
-        </div>
+    </div><!-- /score-bar -->
+
+    <!-- Main area: Field (left) + Panels (right) -->
+    <div id="main-area">
+
+      <!-- Field -->
+      <div class="panel" id="field-panel">
+        <canvas id="field-canvas"></canvas>
       </div>
 
-      <!-- Commentary History -->
-      <div class="panel flex-fill">
-        <div class="panel-header">実況ログ</div>
-        <div class="panel-body">
-          <ul class="log-list" id="commentary-list"></ul>
-        </div>
-      </div>
+      <!-- Right column -->
+      <div id="right-col">
 
-    </div><!-- /center-col -->
-
-    <!-- Right column: Controls + Status + Event Log -->
-    <div id="right-col">
-
-      <!-- User Input -->
-      <div class="panel" id="user-input-panel">
-        <div class="panel-header">ユーザー入力</div>
-        <div class="panel-body">
-          <div class="input-row">
-            <input type="text" id="user-text-input" placeholder="テキストを入力してEnterで送信...">
-            <button class="btn btn-primary" id="send-text-btn">送信</button>
+        <!-- Transcription -->
+        <div class="panel" id="transcription-panel">
+          <div class="panel-header">字幕 (文字起こし)</div>
+          <div class="panel-body">
+            <div id="transcription-text" class="transcription-text"></div>
           </div>
-          <div class="ptt-row">
-            <div id="ptt-indicator" class="ptt-idle">
-              <span id="ptt-label">🎤 スペースキー長押しで音声入力</span>
+        </div>
+
+        <!-- User Input -->
+        <div class="panel" id="user-input-panel">
+          <div class="panel-header">ユーザー入力</div>
+          <div class="panel-body">
+            <div class="input-row">
+              <input type="text" id="user-text-input" placeholder="テキストを入力してEnterで送信...">
+              <button class="btn btn-primary" id="send-text-btn">送信</button>
+            </div>
+            <div class="ptt-row">
+              <div id="ptt-indicator" class="ptt-idle">
+                <span id="ptt-label">🎤 スペースキー長押しで音声入力</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- System Status -->
-      <div class="panel">
-        <div class="panel-header">システム状態</div>
-        <div class="panel-body">
-          <div class="status-indicators">
-            <div class="status-item" id="status-gemini">
-              <div class="status-dot ng"></div>
-              <span class="status-label">Gemini API: 未接続</span>
-            </div>
-            <div class="status-item" id="status-tracker">
-              <div class="status-dot ng"></div>
-              <span class="status-label">Vision Tracker: 未接続</span>
-            </div>
-            <div class="status-item" id="status-gc">
-              <div class="status-dot ng"></div>
-              <span class="status-label">Game Controller: 未接続</span>
-            </div>
+        <!-- Pipeline Monitor -->
+        <div class="panel flex-fill" id="pipeline-panel">
+          <div class="panel-header">実況パイプライン</div>
+          <div class="panel-body pipeline-body">
+            <div id="pipeline-current"></div>
+            <div id="pipeline-pending"></div>
+            <ul class="log-list" id="pipeline-log-list"></ul>
           </div>
         </div>
-      </div>
 
-      <!-- Overlay Control -->
-      <div class="panel" id="overlay-ctrl-panel">
-        <div class="panel-header">オーバーレイ制御</div>
-        <div class="panel-body overlay-ctrl-body">
-          <div class="toggle-row">
-            <span>スコアバー表示</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-hud" checked>
-              <span class="slider"></span>
-            </label>
+        <!-- Commentary History -->
+        <div class="panel flex-fill">
+          <div class="panel-header">実況ログ</div>
+          <div class="panel-body">
+            <ul class="log-list" id="commentary-list"></ul>
           </div>
-          <div class="toggle-row">
-            <span>効果音 (オーバーレイ側)</span>
-            <label class="switch">
-              <input type="checkbox" id="toggle-sound" checked>
-              <span class="slider"></span>
-            </label>
+        </div>
+
+        <!-- Event Log -->
+        <div class="panel" id="event-log-panel">
+          <div class="panel-header">イベントログ (直近20件)</div>
+          <div class="panel-body">
+            <ul class="log-list" id="event-log-list"></ul>
           </div>
-          <div class="overlay-ctrl-ticker">
-            <input type="text" id="ticker-text" placeholder="手動テロップ">
-            <button class="btn btn-primary" id="send-ticker-btn">送信</button>
-          </div>
-          <a class="overlay-link" href="/overlay" target="_blank">
-            <span class="material-symbols-rounded" style="font-size:14px">open_in_new</span>
-            OBSオーバーレイを開く
-          </a>
+        </div>
+
+      </div><!-- /right-col -->
+
+    </div><!-- /main-area -->
+
+    <!-- Overlay Footer -->
+    <div id="overlay-footer">
+      <span class="footer-label">オーバーレイ制御</span>
+      <div class="footer-toggle-group">
+        <div class="footer-toggle">
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggle-hud" checked>
+            <span class="slider"></span>
+          </label>
+          <span>スコアバー</span>
+        </div>
+        <div class="footer-toggle">
+          <label class="switch switch-sm">
+            <input type="checkbox" id="toggle-sound" checked>
+            <span class="slider"></span>
+          </label>
+          <span>効果音</span>
         </div>
       </div>
-
-      <!-- Event Log -->
-      <div class="panel flex-fill" id="event-log-panel">
-        <div class="panel-header">イベントログ (直近20件)</div>
-        <div class="panel-body">
-          <ul class="log-list" id="event-log-list"></ul>
-        </div>
+      <div class="score-bar-divider"></div>
+      <div class="footer-ticker">
+        <input type="text" id="ticker-text" placeholder="手動テロップ">
+        <button class="btn btn-primary btn-sm" id="send-ticker-btn">送信</button>
       </div>
+      <a class="overlay-link" href="/overlay" target="_blank">
+        <span class="material-symbols-rounded">open_in_new</span>OBS
+      </a>
+    </div><!-- /overlay-footer -->
 
-    </div><!-- /right-col -->
   </div><!-- /dashboard -->
 
 
@@ -204,18 +209,6 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label for="cfg-tracker-addr">Tracker アドレス</label>
-          <input type="text" id="cfg-tracker-addr" placeholder="224.5.23.2">
-        </div>
-        <div class="form-group">
-          <label for="cfg-gc-addr">GC アドレス</label>
-          <input type="text" id="cfg-gc-addr" placeholder="224.5.23.1">
-        </div>
-        <div class="form-group">
-          <label for="cfg-vision-addr">Vision アドレス</label>
-          <input type="text" id="cfg-vision-addr" placeholder="224.5.23.1">
-        </div>
       </div>
 
       <!-- Commentary Settings -->
