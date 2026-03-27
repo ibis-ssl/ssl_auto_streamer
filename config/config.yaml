@@ -4,10 +4,6 @@ analysis_agent:
   model: gemini-3-flash-preview
   temperature: 0.7
   timeout_seconds: 8
-reading_manager:
-  model: gemini-3.1-flash-lite-preview  # 読み上げ選別用の軽量モデル
-  timeout_seconds: 3
-  max_recently_spoken: 5  # 重複回避のために記憶する直近発話数
 audio:
   device: ''
 commentary:
@@ -19,16 +15,20 @@ gemini:
   api_key: ''
   model: gemini-3.1-flash-live-preview
   output_transcription: true
+  response_mode: text
   sample_rate: 24000
+  text_model: gemini-3.1-flash-lite-preview
   thinking_level: medium
-  response_mode: text  # "text" (VOICEVOX TTS) or "audio" (Gemini native)
-  text_model: gemini-3.1-flash-lite-preview  # response_mode: text 時に使用するモデル
-voicevox:
-  host: http://localhost:50021
-  speaker: 3
-  speed_scale: 1.0
+reading_manager:
+  max_recently_spoken: 5
+  model: gemini-3.1-flash-lite-preview
+  timeout_seconds: 3
 ssl:
   gc_addr: 224.5.23.1
   gc_port: 10003
   tracker_addr: 224.5.23.2
   tracker_port: 10010
+voicevox:
+  host: http://localhost:50021
+  speaker: 3
+  speed_scale: 1.0
