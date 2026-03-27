@@ -48,10 +48,6 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
     elif not config["gemini"].get("api_key"):
         config["gemini"]["api_key"] = os.environ.get("GEMINI_API_KEY", "")
 
-    if args.our_team_color:
-        config["ssl"]["our_team_color"] = args.our_team_color
-    if args.our_team_name:
-        config["ssl"]["our_team_name"] = args.our_team_name
     if args.tracker_addr:
         config["ssl"]["tracker_addr"] = args.tracker_addr
     if args.tracker_port:
@@ -84,17 +80,6 @@ def main() -> None:
         "--gemini-api-key",
         default=None,
         help="Gemini API key (overrides config and GEMINI_API_KEY env var)",
-    )
-    parser.add_argument(
-        "--our-team-color",
-        choices=["blue", "yellow"],
-        default=None,
-        help="Our team color (default: blue)",
-    )
-    parser.add_argument(
-        "--our-team-name",
-        default=None,
-        help="Our team name for initial context (default: ibis)",
     )
     parser.add_argument(
         "--tracker-addr",

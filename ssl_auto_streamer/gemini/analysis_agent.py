@@ -254,15 +254,16 @@ class AnalysisAgent:
     def _fallback_analysis(self, analysis_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """API が利用できない場合のフォールバック分析テキストを生成する。"""
         game_state = data.get("game_state", {})
-        score_ours = game_state.get("score_ours", "?")
-        score_theirs = game_state.get("score_theirs", "?")
+        score = game_state.get("score", {})
+        score_blue = score.get("blue", "?")
+        score_yellow = score.get("yellow", "?")
 
         messages = {
-            "tactical": f"現在のスコアは{score_ours}対{score_theirs}。両チームともポジション取りに注力している。",
-            "momentum": f"スコア{score_ours}対{score_theirs}で試合は続いている。",
+            "tactical": f"現在のスコアは青{score_blue}対黄{score_yellow}。両チームともポジション取りに注力している。",
+            "momentum": f"スコア青{score_blue}対黄{score_yellow}で試合は続いている。",
             "player_spotlight": "各ロボットがそれぞれの役割を果たしている。",
-            "match_prediction": f"スコア{score_ours}対{score_theirs}。このまま終盤まで接戦が続くか。",
-            "halftime_summary": f"前半はスコア{score_ours}対{score_theirs}で折り返した。",
+            "match_prediction": f"スコア青{score_blue}対黄{score_yellow}。このまま終盤まで接戦が続くか。",
+            "halftime_summary": f"前半はスコア青{score_blue}対黄{score_yellow}で折り返した。",
         }
 
         text = messages.get(analysis_type, "試合は続いている。")

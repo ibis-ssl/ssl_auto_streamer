@@ -133,7 +133,7 @@ class WorldModelReader:
             "instruction": self._ANALYSIS_INSTRUCTIONS.get(analysis_type, "試合状況を分析して解説する。"),
             "recommended_functions": self._get_recommended_functions(analysis_type),
             "context": {
-                "score": {"ours": context.our_score, "theirs": context.their_score},
+                "score": {"blue": context.blue_score, "yellow": context.yellow_score},
                 "elapsed_minutes": context.elapsed_seconds / 60.0,
                 "momentum": context.momentum,
             },
@@ -184,7 +184,7 @@ class WorldModelReader:
         if not context:
             return {}
         return {
-            "score": {"ours": context.our_score, "theirs": context.their_score},
+            "score": {"blue": context.blue_score, "yellow": context.yellow_score},
             "elapsed_minutes": context.elapsed_seconds / 60.0,
             "momentum": context.momentum,
             "recent_events": context.recent_events[-3:],

@@ -74,18 +74,12 @@ function handleMessage(msg) {
 function updateHUD(state) {
   const gs = state.game_state || {};
   const teamInfo = state.team_info || {};
-  const ours = teamInfo.ours || {};
-  const theirs = teamInfo.theirs || {};
+  const blue = teamInfo.blue || {};
+  const yellow = teamInfo.yellow || {};
 
-  // チーム名とスコア
-  const ourColor = ours.color || 'blue';
-  if (ourColor === 'blue') {
-    setTeamSide('left',  ours.name   || 'Blue',   gs.score?.ours ?? '-');
-    setTeamSide('right', theirs.name || 'Yellow',  gs.score?.theirs ?? '-');
-  } else {
-    setTeamSide('left',  theirs.name || 'Blue',    gs.score?.theirs ?? '-');
-    setTeamSide('right', ours.name   || 'Yellow',  gs.score?.ours ?? '-');
-  }
+  // チーム名とスコア (blue=左, yellow=右 固定)
+  setTeamSide('left',  blue.name   || '青チーム', gs.score?.blue ?? '-');
+  setTeamSide('right', yellow.name || '黄チーム', gs.score?.yellow ?? '-');
 
   // タイマー
   const mins = gs.elapsed_minutes ?? 0;

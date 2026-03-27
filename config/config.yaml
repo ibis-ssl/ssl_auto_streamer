@@ -18,7 +18,5 @@ gemini:
 ssl:
   gc_addr: 224.5.23.1
   gc_port: 10003
-  our_team_color: blue
-  our_team_name: ibis
   tracker_addr: 224.5.23.2
   tracker_port: 10010

@@ -18,8 +18,8 @@ const FIELD = {
 };
 
 const TEAM_COLOR = {
-  ours:   '#388bfd',
-  theirs: '#e3b341',
+  blue:   '#388bfd',
+  yellow: '#e3b341',
 };
 
 class FieldRenderer {
@@ -69,7 +69,7 @@ class FieldRenderer {
       if (fieldSnapshot.ball_trail) {
         this._drawBallTrail(ctx, fieldSnapshot.ball_trail);
       }
-      this._drawRobots(ctx, fieldSnapshot.robots_ours, fieldSnapshot.robots_theirs);
+      this._drawRobots(ctx, fieldSnapshot.robots_blue, fieldSnapshot.robots_yellow);
       this._drawBall(ctx, fieldSnapshot.ball);
     }
   }
@@ -137,16 +137,16 @@ class FieldRenderer {
     ctx.fill();
   }
 
-  _drawRobots(ctx, oursRobots, theirsRobots) {
+  _drawRobots(ctx, blueRobots, yellowRobots) {
     const r = Math.max(4, this._m(FIELD.robotRadius));
-    if (oursRobots) {
-      for (const robot of oursRobots) {
-        this._drawRobot(ctx, robot, TEAM_COLOR.ours, r);
+    if (blueRobots) {
+      for (const robot of blueRobots) {
+        this._drawRobot(ctx, robot, TEAM_COLOR.blue, r);
       }
     }
-    if (theirsRobots) {
-      for (const robot of theirsRobots) {
-        this._drawRobot(ctx, robot, TEAM_COLOR.theirs, r);
+    if (yellowRobots) {
+      for (const robot of yellowRobots) {
+        this._drawRobot(ctx, robot, TEAM_COLOR.yellow, r);
       }
     }
   }

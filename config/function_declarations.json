@@ -32,14 +32,15 @@
           "type": "integer",
           "description": "ロボットID（0-15）"
         },
-        "is_ours": {
-          "type": "boolean",
-          "description": "自チーム（ibis）のロボットかどうか"
+        "team": {
+          "type": "string",
+          "enum": ["blue", "yellow"],
+          "description": "チームカラー（blue または yellow）"
         }
       },
       "required": [
         "robot_id",
-        "is_ours"
+        "team"
       ]
     }
   },
@@ -52,8 +53,8 @@
         "team": {
           "type": "string",
           "enum": [
-            "ours",
-            "theirs",
+            "blue",
+            "yellow",
             "all"
           ],
           "description": "対象チーム（デフォルト: all）"

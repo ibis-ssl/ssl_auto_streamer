@@ -20,7 +20,7 @@ class DetectedEvent:
     position: Tuple[float, float]
     ball_speed: float
     confidence: float
-    primary_robot: Optional[Dict] = None   # {"id": int, "is_ours": bool}
+    primary_robot: Optional[Dict] = None   # {"id": int, "team": str}
     secondary_robot: Optional[Dict] = None
     metadata: Dict = field(default_factory=dict)
 
@@ -68,9 +68,7 @@ class EventDetector:
     Tracker heuristics detect passes, shots, saves, and possession changes.
     """
 
-    def __init__(self, our_team_is_blue: bool):
-        self._our_team_is_blue = our_team_is_blue
-
+    def __init__(self):
         # GC state tracking
         self._seen_gc_event_ids: Set[str] = set()
         self._last_gc_command: Optional[int] = None
@@ -79,7 +77,7 @@ class EventDetector:
         # Tracker heuristics state
         self._prev_ball_pos: Optional[Tuple[float, float]] = None
         self._prev_ball_speed: float = 0.0
-        self._prev_possessor: Optional[Dict] = None  # {"id": int, "is_ours": bool}
+        self._prev_possessor: Optional[Dict] = None  # {"id": int, "team": str}
         self._shot_in_progress: bool = False
         self._shot_start_time: float = 0.0
         self._last_ball_pos: Tuple[float, float] = (0.0, 0.0)
@@ -141,19 +139,19 @@ class EventDetector:
         ball_speed = math.hypot(ball.vel.x, ball.vel.y)
 
         # Find nearest robot to ball for each team
-        nearest_ours = self._find_nearest_robot(frame, ball_pos, is_ours=True)
-        nearest_theirs = self._find_nearest_robot(frame, ball_pos, is_ours=False)
+        nearest_blue = self._find_nearest_robot(frame, ball_pos, "blue")
+        nearest_yellow = self._find_nearest_robot(frame, ball_pos, "yellow")
 
         # Determine current possessor
         current_possessor = self._determine_possessor(
-            ball_pos, nearest_ours, nearest_theirs
+            ball_pos, nearest_blue, nearest_yellow
         )
 
         # Possession change detection
         if (
             current_possessor is not None
             and self._prev_possessor is not None
-            and current_possessor["is_ours"] != self._prev_possessor["is_ours"]
+            and current_possessor["team"] != self._prev_possessor["team"]
             and ball_speed > 0.3
         ):
             events.append(
@@ -171,7 +169,7 @@ class EventDetector:
         if (
             current_possessor is not None
             and self._prev_possessor is not None
-            and current_possessor["is_ours"] == self._prev_possessor["is_ours"]
+            and current_possessor["team"] == self._prev_possessor["team"]
             and current_possessor["id"] != self._prev_possessor["id"]
             and ball_speed > _PASS_SPEED_THRESHOLD
         ):
@@ -217,9 +215,8 @@ class EventDetector:
             and ball_speed < self._prev_ball_speed * 0.5
             and self._near_goal(ball_pos)
         ):
-            gk = nearest_theirs if (
-                self._prev_possessor and self._prev_possessor.get("is_ours")
-            ) else nearest_ours
+            shooting_team = self._prev_possessor.get("team") if self._prev_possessor else None
+            gk = nearest_yellow if shooting_team == "blue" else nearest_blue
             events.append(
                 DetectedEvent(
                     event_type="SAVE",
@@ -274,13 +271,12 @@ class EventDetector:
             if hasattr(event_data, "by_team"):
                 by_team_value = event_data.by_team
                 # Team: 0=UNKNOWN, 1=YELLOW, 2=BLUE
-                is_blue = (by_team_value == 2)
-                is_ours = (is_blue == self._our_team_is_blue)
-                metadata["by_team_is_ours"] = is_ours
+                team = "blue" if by_team_value == 2 else "yellow"
+                metadata["by_team"] = team
             if hasattr(event_data, "by_bot"):
                 robot_id = event_data.by_bot
-                is_ours = metadata.get("by_team_is_ours", True)
-                primary_robot = {"id": robot_id, "is_ours": is_ours}
+                team = metadata.get("by_team", "blue")
+                primary_robot = {"id": robot_id, "team": team}
             if hasattr(event_data, "initial_ball_speed"):
                 metadata["ball_speed"] = event_data.initial_ball_speed
 
@@ -358,18 +354,16 @@ class EventDetector:
         self,
         frame: Any,
         ball_pos: Tuple[float, float],
-        is_ours: bool,
+        team: str,
     ) -> Optional[Dict]:
-        """Find the robot nearest to the ball for a given team."""
+        """Find the robot nearest to the ball for a given team (blue/yellow)."""
+        # Team proto enum: 1=YELLOW, 2=BLUE
+        team_id = 2 if team == "blue" else 1
         min_dist = float("inf")
         nearest = None
 
         for robot in frame.robots:
-            # Team: 1=YELLOW, 2=BLUE
-            is_blue = (robot.robot_id.team == 2)
-            robot_is_ours = (is_blue == self._our_team_is_blue)
-
-            if robot_is_ours != is_ours:
+            if robot.robot_id.team != team_id:
                 continue
             if robot.visibility < 0.5:
                 continue
@@ -379,7 +373,7 @@ class EventDetector:
                 min_dist = dist
                 nearest = {
                     "id": robot.robot_id.id,
-                    "is_ours": robot_is_ours,
+                    "team": team,
                     "dist": dist,
                 }
 
@@ -388,21 +382,21 @@ class EventDetector:
     def _determine_possessor(
         self,
         ball_pos: Tuple[float, float],
-        nearest_ours: Optional[Dict],
-        nearest_theirs: Optional[Dict],
+        nearest_blue: Optional[Dict],
+        nearest_yellow: Optional[Dict],
     ) -> Optional[Dict]:
         """Determine which robot (if any) has possession."""
-        our_dist = nearest_ours["dist"] if nearest_ours else float("inf")
-        their_dist = nearest_theirs["dist"] if nearest_theirs else float("inf")
+        blue_dist = nearest_blue["dist"] if nearest_blue else float("inf")
+        yellow_dist = nearest_yellow["dist"] if nearest_yellow else float("inf")
 
-        if our_dist < _BALL_CONTACT_DIST:
-            return {"id": nearest_ours["id"], "is_ours": True}
-        if their_dist < _BALL_CONTACT_DIST:
-            return {"id": nearest_theirs["id"], "is_ours": False}
-        if our_dist < _POSSESSION_CHANGE_MIN_DIST and our_dist < their_dist:
-            return {"id": nearest_ours["id"], "is_ours": True}
-        if their_dist < _POSSESSION_CHANGE_MIN_DIST and their_dist < our_dist:
-            return {"id": nearest_theirs["id"], "is_ours": False}
+        if blue_dist < _BALL_CONTACT_DIST:
+            return {"id": nearest_blue["id"], "team": "blue"}
+        if yellow_dist < _BALL_CONTACT_DIST:
+            return {"id": nearest_yellow["id"], "team": "yellow"}
+        if blue_dist < _POSSESSION_CHANGE_MIN_DIST and blue_dist < yellow_dist:
+            return {"id": nearest_blue["id"], "team": "blue"}
+        if yellow_dist < _POSSESSION_CHANGE_MIN_DIST and yellow_dist < blue_dist:
+            return {"id": nearest_yellow["id"], "team": "yellow"}
         return None
 
     def _is_shot_direction(

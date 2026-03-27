@@ -43,13 +43,13 @@
       <div class="panel-header">SCOREBOARD</div>
       <div class="score-row">
         <div class="team-block">
-          <div class="team-name blue">自チーム (Blue)</div>
-          <div class="team-score" id="score-ours">-</div>
+          <div class="team-name blue" id="team-name-blue">青チーム (Blue)</div>
+          <div class="team-score" id="score-blue">-</div>
         </div>
         <div class="score-sep">VS</div>
         <div class="team-block">
-          <div class="team-name yellow">相手チーム (Yellow)</div>
-          <div class="team-score" id="score-theirs">-</div>
+          <div class="team-name yellow" id="team-name-yellow">黄チーム (Yellow)</div>
+          <div class="team-score" id="score-yellow">-</div>
         </div>
       </div>
       <div class="score-meta">
@@ -132,17 +132,6 @@
       <!-- SSL Settings -->
       <div class="settings-section">
         <div class="panel-header">SSL 設定</div>
-        <div class="form-group">
-          <label for="cfg-team-color">自チームカラー</label>
-          <select id="cfg-team-color">
-            <option value="blue">Blue</option>
-            <option value="yellow">Yellow</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label for="cfg-team-name">自チーム名</label>
-          <input type="text" id="cfg-team-name" placeholder="ibis">
-        </div>
         <div class="form-group">
           <label for="cfg-tracker-addr">Tracker アドレス</label>
           <input type="text" id="cfg-tracker-addr" placeholder="224.5.23.2">

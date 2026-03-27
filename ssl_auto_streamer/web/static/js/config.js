@@ -19,8 +19,6 @@ function populateForm(cfg) {
   const gemini = cfg.gemini || {};
   const audio = cfg.audio || {};
 
-  setVal('cfg-team-color', ssl.our_team_color || 'blue');
-  setVal('cfg-team-name', ssl.our_team_name || '');
   setVal('cfg-tracker-addr', ssl.tracker_addr || '');
   setVal('cfg-tracker-port', ssl.tracker_port || '');
   setVal('cfg-gc-addr', ssl.gc_addr || '');
@@ -45,8 +43,6 @@ async function applyConfig() {
 
   const payload = {
     ssl: {
-      our_team_color: getVal('cfg-team-color'),
-      our_team_name: getVal('cfg-team-name'),
       tracker_addr: getVal('cfg-tracker-addr'),
       tracker_port: parseInt(getVal('cfg-tracker-port')) || undefined,
       gc_addr: getVal('cfg-gc-addr'),

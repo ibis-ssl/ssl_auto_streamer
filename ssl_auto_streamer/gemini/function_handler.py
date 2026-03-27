@@ -71,10 +71,12 @@ class FunctionHandler:
 
     def _handle_get_robot_status(self, args: Dict[str, Any]) -> Dict[str, Any]:
         robot_id = args.get("robot_id")
-        is_ours = args.get("is_ours")
-        if robot_id is None or is_ours is None:
-            return {"error": "robot_id and is_ours are required"}
-        return self._writer.get_robot_status_data(int(robot_id), bool(is_ours))
+        team = args.get("team")
+        if robot_id is None or team is None:
+            return {"error": "robot_id and team are required"}
+        if team not in ("blue", "yellow"):
+            return {"error": "team must be 'blue' or 'yellow'"}
+        return self._writer.get_robot_status_data(int(robot_id), team)
 
     def _handle_get_all_robots_summary(self, args: Dict[str, Any]) -> Dict[str, Any]:
         team = args.get("team", "all")

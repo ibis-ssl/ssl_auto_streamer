@@ -152,12 +152,24 @@ function handleMessage(msg) {
 }
 
 function updateDashboard(state) {
+  window._lastTeamInfo = state.team_info || {};
+  updateTeamNames(state.team_info);
   updateScoreboard(state.game_state, state.status);
   updateStatusIndicators(state.status);
   updateStreamingControl(state.status);
   updateField(state);
   renderEventLog(state.event_log || []);
   renderCommentaryHistory(state.commentary_history || []);
+}
+
+function updateTeamNames(teamInfo) {
+  if (!teamInfo) return;
+  const blue = teamInfo.blue || {};
+  const yellow = teamInfo.yellow || {};
+  const blueEl = document.getElementById('team-name-blue');
+  const yellowEl = document.getElementById('team-name-yellow');
+  if (blueEl && blue.name) blueEl.textContent = blue.name + ' (Blue)';
+  if (yellowEl && yellow.name) yellowEl.textContent = yellow.name + ' (Yellow)';
 }
 
 function updateStreamingControl(status) {
@@ -195,8 +207,8 @@ function updateScoreboard(gs, status) {
   if (!gs) return;
 
   const score = gs.score || {};
-  document.getElementById('score-ours').textContent = score.ours ?? '-';
-  document.getElementById('score-theirs').textContent = score.theirs ?? '-';
+  document.getElementById('score-blue').textContent = score.blue ?? '-';
+  document.getElementById('score-yellow').textContent = score.yellow ?? '-';
 
   const mins = gs.elapsed_minutes ?? 0;
   const m = Math.floor(mins);
@@ -209,8 +221,11 @@ function updateScoreboard(gs, status) {
 
   const momentum = gs.momentum || 'NEUTRAL';
   const momentumEl = document.getElementById('momentum');
-  momentumEl.textContent = momentum === 'OURS' ? '我々優勢' :
-    momentum === 'THEIRS' ? '相手優勢' : 'イーブン';
+  const teamNames = window._lastTeamInfo || {};
+  const blueName = (teamNames.blue && teamNames.blue.name) || '青';
+  const yellowName = (teamNames.yellow && teamNames.yellow.name) || '黄';
+  momentumEl.textContent = momentum === 'BLUE' ? `${blueName}優勢` :
+    momentum === 'YELLOW' ? `${yellowName}優勢` : 'イーブン';
   momentumEl.className = 'momentum-' + momentum.toLowerCase();
 }
 

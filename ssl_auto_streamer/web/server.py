@@ -19,6 +19,8 @@ import aiohttp
 import yaml
 from aiohttp import web
 
+from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
+
 logger = logging.getLogger(__name__)
 
 _RECEIVER_TIMEOUT_SEC = 2.0
@@ -193,25 +195,19 @@ class WebServer:
         }
 
     def _build_team_info(self) -> Dict[str, Any]:
-        """Build team info dict from config and optional team names callback."""
-        ssl_cfg = self._config.get("ssl", {})
-        our_color = ssl_cfg.get("our_team_color", "blue")
-        our_name = ssl_cfg.get("our_team_name", "")
-        their_name = ""
+        """Build team info dict from GC team names."""
+        blue_name = DEFAULT_BLUE_TEAM_NAME
+        yellow_name = DEFAULT_YELLOW_TEAM_NAME
 
         if self._get_team_names:
             try:
-                ours, theirs = self._get_team_names()
-                if ours:
-                    our_name = ours
-                if theirs:
-                    their_name = theirs
+                blue_name, yellow_name = self._get_team_names()
             except Exception:
                 pass
 
         return {
-            "ours": {"name": our_name, "color": our_color},
-            "theirs": {"name": their_name, "color": "yellow" if our_color == "blue" else "blue"},
+            "blue": {"name": blue_name, "color": "blue"},
+            "yellow": {"name": yellow_name, "color": "yellow"},
         }
 
     async def _broadcast(self, msg: str) -> None:
@@ -315,8 +311,7 @@ class WebServer:
         # SSL settings — runtime reflectable
         if "ssl" in data:
             self._config.setdefault("ssl", {})
-            for key in ("our_team_color", "our_team_name", "tracker_addr",
-                        "tracker_port", "gc_addr", "gc_port"):
+            for key in ("tracker_addr", "tracker_port", "gc_addr", "gc_port"):
                 if key in data["ssl"]:
                     self._config["ssl"][key] = data["ssl"][key]
 

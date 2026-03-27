@@ -20,6 +20,7 @@ from ssl_auto_streamer.data import (
     get_team_reading_from_data,
 )
 from ssl_auto_streamer.statler import WorldModelWriter, WorldModelReader
+from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
 from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
@@ -49,9 +50,6 @@ class CommentaryApp:
         commentary_cfg = config.get("commentary", {})
         analysis_agent_cfg = config.get("analysis_agent", {})
 
-        self._our_team_is_blue = ssl_cfg.get("our_team_color", "blue") == "blue"
-        self._our_team_name: str = ssl_cfg.get("our_team_name", "ibis")
-        self._their_team_name: Optional[str] = None
         self._initial_context_sent: bool = False
 
         # Config file directory
@@ -91,7 +89,7 @@ class CommentaryApp:
         self._function_handler.set_analysis_agent(self._analysis_agent)
 
         # Initialize event detector
-        self._event_detector = EventDetector(self._our_team_is_blue)
+        self._event_detector = EventDetector()
 
         # Gemini client
         api_key = gemini_cfg.get("api_key") or os.environ.get("GEMINI_API_KEY", "")
@@ -155,7 +153,7 @@ class CommentaryApp:
                 config=config,
                 config_dir=self._config_dir,
                 on_config_update=self._on_web_config_update,
-                get_team_names=lambda: (self._our_team_name, self._their_team_name),
+                get_team_names=lambda: self._writer.get_team_names(),
                 on_start_streaming=self._on_web_start_streaming,
                 on_stop_streaming=self._on_web_stop_streaming,
                 get_streaming=lambda: self._streaming,
@@ -268,12 +266,13 @@ class CommentaryApp:
             self._audio_output.start()
             logger.info("Connected to Gemini API, audio started")
             await self._send_initial_context()
+            blue_name, yellow_name = self._writer.get_team_names()
             startup_msg = json.dumps({
                 "mode": "startup",
                 "instruction": "試合前の挨拶として、対戦カード（両チーム名）と簡単な見どころを述べてください。「システム起動」などのメタ発言は禁止。",
                 "teams": {
-                    "ours": get_team_reading_from_data(self._our_team_name, self._team_profiles),
-                    "theirs": get_team_reading_from_data(self._their_team_name, self._team_profiles) if self._their_team_name else "未定",
+                    "blue": get_team_reading_from_data(blue_name, self._team_profiles),
+                    "yellow": get_team_reading_from_data(yellow_name, self._team_profiles),
                 },
             }, ensure_ascii=False)
             await self._gemini_client.send_text(startup_msg)
@@ -323,7 +322,7 @@ class CommentaryApp:
     def _on_tracker_frame(self, frame: Any) -> None:
         """Handle TrackedFrame from TrackerClient."""
         try:
-            self._writer.update_from_tracker(frame, self._our_team_is_blue)
+            self._writer.update_from_tracker(frame)
             if self._web_server:
                 self._web_server.update_tracker_seen()
             events = self._event_detector.update_from_tracker(frame)
@@ -335,40 +334,24 @@ class CommentaryApp:
     def _on_referee_message(self, referee: Any) -> None:
         """Handle Referee message from GCClient."""
         try:
-            self._writer.update_from_referee(referee, self._our_team_is_blue)
+            self._writer.update_from_referee(referee)
             if self._web_server:
                 self._web_server.update_gc_seen()
-            self._update_team_names_from_referee(referee)
+            self._check_team_names_from_referee(referee)
             events = self._event_detector.update_from_referee(referee)
             for event in events:
                 self._on_detected_event(event)
         except Exception as e:
             logger.debug(f"Referee message processing error: {e}")
 
-    def _update_team_names_from_referee(self, referee: Any) -> None:
-        """Extract team names from Referee message and send initial context."""
-        try:
-            if self._our_team_is_blue:
-                our_name = referee.blue.name
-                their_name = referee.yellow.name
-            else:
-                our_name = referee.yellow.name
-                their_name = referee.blue.name
-
-            changed = False
-            if our_name and our_name != self._our_team_name:
-                self._our_team_name = our_name
-                changed = True
-            if their_name and their_name != self._their_team_name:
-                self._their_team_name = their_name
-                changed = True
-
-            if not self._initial_context_sent and self._their_team_name and self._connected:
-                asyncio.create_task(self._send_initial_context())
-            elif self._initial_context_sent and changed and self._connected:
-                asyncio.create_task(self._send_team_update())
-        except Exception as e:
-            logger.debug(f"Team name extraction error: {e}")
+    def _check_team_names_from_referee(self, referee: Any) -> None:
+        """Check if team names are available and send initial context / team update."""
+        if not self._connected:
+            return
+        if not self._initial_context_sent and self._writer.are_team_names_known():
+            asyncio.create_task(self._send_initial_context())
+        elif self._initial_context_sent and self._writer.consume_team_names_changed():
+            asyncio.create_task(self._send_team_update())
 
     def _on_detected_event(self, event: DetectedEvent) -> None:
         """Handle a detected game event."""
@@ -384,11 +367,14 @@ class CommentaryApp:
         if event.secondary_robot:
             event_data["secondary_robot"] = event.secondary_robot
         if event.metadata:
-            # Convert team name if present
+            # Convert team color key (by_team) to readable name if present
             metadata = dict(event.metadata)
-            if "team" in metadata:
-                metadata["team"] = get_team_reading_from_data(
-                    metadata["team"], self._team_profiles
+            if "by_team" in metadata:
+                blue_name, yellow_name = self._writer.get_team_names()
+                team_key = metadata["by_team"]
+                team_name = blue_name if team_key == "blue" else yellow_name
+                metadata["by_team_name"] = get_team_reading_from_data(
+                    team_name, self._team_profiles
                 )
             event_data["metadata"] = metadata
 
@@ -516,11 +502,12 @@ class CommentaryApp:
         if self._initial_context_sent or not self._connected:
             return
 
+        blue_name, yellow_name = self._writer.get_team_names()
         context = generate_initial_context(
             ssl_rules=self._ssl_rules,
             team_profiles=self._team_profiles,
-            our_team_name=self._our_team_name,
-            their_team_name=self._their_team_name,
+            blue_team_name=blue_name if blue_name != DEFAULT_BLUE_TEAM_NAME else None,
+            yellow_team_name=yellow_name if yellow_name != DEFAULT_YELLOW_TEAM_NAME else None,
         )
         logger.info("Sending initial context to Gemini")
         await self._gemini_client.send_text(f"[SYSTEM CONTEXT]\n{context}")
@@ -542,11 +529,8 @@ class CommentaryApp:
 
     def _on_web_config_update(self, config: Dict[str, Any]) -> None:
         """Apply runtime-reflectable config changes from Web UI."""
-        ssl_cfg = config.get("ssl", {})
         commentary_cfg = config.get("commentary", {})
 
-        self._our_team_is_blue = ssl_cfg.get("our_team_color", "blue") == "blue"
-        self._our_team_name = ssl_cfg.get("our_team_name", self._our_team_name)
         self._analyst_threshold = commentary_cfg.get(
             "analyst_silence_threshold", self._analyst_threshold
         )
@@ -563,27 +547,23 @@ class CommentaryApp:
         if not self._connected:
             return
 
-        update = {
+        blue_name, yellow_name = self._writer.get_team_names()
+        update: Dict[str, Any] = {
             "type": "team_update",
-            "instruction": "チーム情報が更新されました。以降の実況ではこのチーム名（reading）を使用してください。新しい対戦相手の特徴を簡潔に紹介してください。",
-            "our_team": {
-                "name": get_team_reading_from_data(
-                    self._our_team_name, self._team_profiles
-                ),
-                "key": self._our_team_name,
-                **get_team_profile_from_data(self._our_team_name, self._team_profiles),
-            },
+            "instruction": "チーム情報が更新されました。以降の実況ではこのチーム名（reading）を使用してください。",
         }
 
-        if self._their_team_name:
-            update["their_team"] = {
-                "name": get_team_reading_from_data(
-                    self._their_team_name, self._team_profiles
-                ),
-                "key": self._their_team_name,
-                **get_team_profile_from_data(
-                    self._their_team_name, self._team_profiles
-                ),
+        if blue_name and blue_name != DEFAULT_BLUE_TEAM_NAME:
+            update["blue_team"] = {
+                "name": get_team_reading_from_data(blue_name, self._team_profiles),
+                "key": blue_name,
+                **get_team_profile_from_data(blue_name, self._team_profiles),
+            }
+        if yellow_name and yellow_name != DEFAULT_YELLOW_TEAM_NAME:
+            update["yellow_team"] = {
+                "name": get_team_reading_from_data(yellow_name, self._team_profiles),
+                "key": yellow_name,
+                **get_team_profile_from_data(yellow_name, self._team_profiles),
             }
 
         update_json = json.dumps(update, ensure_ascii=False, indent=2)

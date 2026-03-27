@@ -9,6 +9,8 @@
 import json
 from typing import Optional, Dict, Any
 
+from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
+
 
 def get_team_profile_from_data(
     team_name: str, team_profiles: Dict[str, Any]
@@ -39,8 +41,8 @@ def get_team_reading_from_data(team_key: str, team_profiles: Dict[str, Any]) -> 
 def generate_initial_context(
     ssl_rules: Dict[str, Any],
     team_profiles: Dict[str, Any],
-    our_team_name: str = "ibis",
-    their_team_name: Optional[str] = None,
+    blue_team_name: Optional[str] = None,
+    yellow_team_name: Optional[str] = None,
 ) -> str:
     """Generate initial context JSON for commentary session."""
     context = {
@@ -62,40 +64,41 @@ def generate_initial_context(
             ],
             "set_plays": ssl_rules["set_plays"],
         },
-        "our_team": {
-            "name": get_team_reading_from_data(our_team_name, team_profiles),
-            "key": our_team_name,
-            **get_team_profile_from_data(our_team_name, team_profiles),
-        },
     }
 
-    if their_team_name:
-        context["their_team"] = {
-            "name": get_team_reading_from_data(their_team_name, team_profiles),
-            "key": their_team_name,
-            **get_team_profile_from_data(their_team_name, team_profiles),
+    if blue_team_name:
+        context["blue_team"] = {
+            "name": get_team_reading_from_data(blue_team_name, team_profiles),
+            "key": blue_team_name,
+            **get_team_profile_from_data(blue_team_name, team_profiles),
         }
     else:
-        context["their_team"] = {
-            "name": "未定",
-            "note": "相手チーム情報は試合開始時に更新されます",
-        }
+        context["blue_team"] = {"name": DEFAULT_BLUE_TEAM_NAME, "note": "チーム情報はGCから取得されます"}
 
-    our_profile = get_team_profile_from_data(our_team_name, team_profiles)
-    their_profile = (
-        get_team_profile_from_data(their_team_name, team_profiles)
-        if their_team_name
-        else {}
-    )
-    our_style = our_profile.get("style", "不明")
-    their_style = their_profile.get("style", "不明") if their_team_name else "未定"
-    if their_team_name and our_style != "不明" and their_style != "不明":
-        narrative = f"{our_style} vs {their_style}の対戦。スタイルの違いに注目"
+    if yellow_team_name:
+        context["yellow_team"] = {
+            "name": get_team_reading_from_data(yellow_team_name, team_profiles),
+            "key": yellow_team_name,
+            **get_team_profile_from_data(yellow_team_name, team_profiles),
+        }
     else:
-        narrative = f"{get_team_reading_from_data(our_team_name, team_profiles)}の特徴を活かした戦い方に注目"
+        context["yellow_team"] = {"name": DEFAULT_YELLOW_TEAM_NAME, "note": "チーム情報はGCから取得されます"}
+
+    blue_profile = get_team_profile_from_data(blue_team_name, team_profiles) if blue_team_name else {}
+    yellow_profile = get_team_profile_from_data(yellow_team_name, team_profiles) if yellow_team_name else {}
+    blue_style = blue_profile.get("style", "不明")
+    yellow_style = yellow_profile.get("style", "不明")
+
+    if blue_team_name and yellow_team_name and blue_style != "不明" and yellow_style != "不明":
+        narrative = f"{blue_style} vs {yellow_style}の対戦。スタイルの違いに注目"
+    elif blue_team_name and yellow_team_name:
+        narrative = f"{get_team_reading_from_data(blue_team_name, team_profiles)} vs {get_team_reading_from_data(yellow_team_name, team_profiles)}の対戦"
+    else:
+        narrative = "試合開始を待っています。両チームのGC情報を受信次第、詳細情報を更新します"
+
     context["matchup"] = {
-        "our_style": our_style,
-        "their_style": their_style,
+        "blue_style": blue_style,
+        "yellow_style": yellow_style,
         "narrative_angle": narrative,
     }
 
