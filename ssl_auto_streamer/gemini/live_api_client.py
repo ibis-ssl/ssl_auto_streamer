@@ -130,8 +130,6 @@ class GeminiLiveApiClient:
                     "thinkingLevel": self._config.thinking_level,
                 },
             }
-            if self._config.output_transcription:
-                generation_config["output_audio_transcription"] = {}
 
             setup_msg = {
                 "setup": {
@@ -230,9 +228,8 @@ class GeminiLiveApiClient:
             return
 
         message = {
-            "client_content": {
-                "turns": [{"role": "user", "parts": [{"text": text}]}],
-                "turn_complete": True,
+            "realtime_input": {
+                "text": text,
             }
         }
 
@@ -255,8 +252,10 @@ class GeminiLiveApiClient:
                     self._handle_response(data)
                 except json.JSONDecodeError:
                     logger.warning("Received non-JSON message")
-        except websockets.exceptions.ConnectionClosed:
-            logger.info("WebSocket connection closed")
+        except websockets.exceptions.ConnectionClosed as e:
+            close_code = getattr(e.rcvd, "code", "unknown") if e.rcvd else "unknown"
+            close_reason = getattr(e.rcvd, "reason", "") if e.rcvd else ""
+            logger.info(f"WebSocket connection closed (code={close_code}, reason={close_reason!r})")
             self._connected = False
             if self._on_disconnect_callback:
                 self._on_disconnect_callback()
