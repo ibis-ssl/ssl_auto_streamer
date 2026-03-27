@@ -20,9 +20,8 @@ function populateForm(cfg) {
   const audio = cfg.audio || {};
 
   setVal('cfg-tracker-addr', ssl.tracker_addr || '');
-  setVal('cfg-tracker-port', ssl.tracker_port || '');
   setVal('cfg-gc-addr', ssl.gc_addr || '');
-  setVal('cfg-gc-port', ssl.gc_port || '');
+  setVal('cfg-vision-addr', ssl.vision_addr || '');
 
   setVal('cfg-silence-threshold', commentary.analyst_silence_threshold || '');
   setVal('cfg-update-rate', commentary.writer_update_rate || '');
@@ -44,9 +43,8 @@ async function applyConfig() {
   const payload = {
     ssl: {
       tracker_addr: getVal('cfg-tracker-addr'),
-      tracker_port: parseInt(getVal('cfg-tracker-port')) || undefined,
       gc_addr: getVal('cfg-gc-addr'),
-      gc_port: parseInt(getVal('cfg-gc-port')) || undefined,
+      vision_addr: getVal('cfg-vision-addr'),
     },
     commentary: {
       analyst_silence_threshold: parseFloat(getVal('cfg-silence-threshold')) || undefined,
@@ -108,5 +106,61 @@ function cleanPayload(obj) {
     } else if (typeof obj[key] === 'object') {
       cleanPayload(obj[key]);
     }
+  }
+}
+
+/**
+ * Port switching — called by button clicks in SSL settings panel.
+ * @param {string} source  'tracker' | 'gc' | 'vision'
+ * @param {number} portIndex  0 or 1
+ */
+async function switchPort(source, portIndex) {
+  // Read the current port number from the button label
+  const btn = document.getElementById(`btn-${source}-${portIndex}`);
+  if (!btn) return;
+  const port = parseInt(btn.textContent, 10);
+
+  try {
+    const res = await fetch('/api/ssl/switch-port', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source, port }),
+    });
+    const data = await res.json();
+    if (!data.success) {
+      console.error('Port switch failed:', data.error);
+    }
+  } catch (e) {
+    console.error('Port switch error:', e);
+  }
+}
+
+/**
+ * Update port status buttons from the status payload.
+ * Called with the port_status object from /api/status WebSocket messages.
+ */
+function updatePortStatusUI(portStatus) {
+  if (!portStatus) return;
+
+  const sources = ['vision', 'gc', 'tracker'];
+  for (const src of sources) {
+    const info = portStatus[src];
+    if (!info) continue;
+
+    info.ports.forEach((p, i) => {
+      const btn = document.getElementById(`btn-${src}-${i}`);
+      if (!btn) return;
+
+      // Update port number label in case config changed
+      btn.textContent = p.port;
+
+      // Style: active = solid, receiving = green dot indicator
+      const isActive = p.port === info.active;
+      const isReceiving = p.receiving;
+
+      btn.className = 'btn btn-port';
+      if (isActive) btn.classList.add('active');
+      if (isReceiving) btn.classList.add('receiving');
+    });
   }
 }

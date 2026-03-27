@@ -8,14 +8,14 @@
 
 import asyncio
 import logging
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
-from .multicast_receiver import MulticastReceiver
+from .dual_port_receiver import DualPortReceiver
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_GC_ADDR = "224.5.23.1"
-DEFAULT_GC_PORT = 10003
+DEFAULT_GC_PORTS = [10003, 11003]
 
 
 class GCClient:
@@ -24,17 +24,18 @@ class GCClient:
 
     Parses protobuf and delivers Referee objects to a callback.
     Falls back to raw bytes callback if protobuf is not compiled.
+    Listens on two ports simultaneously and auto-switches to the active one.
     """
 
     def __init__(
         self,
         addr: str = DEFAULT_GC_ADDR,
-        port: int = DEFAULT_GC_PORT,
+        ports: Optional[List[int]] = None,
     ):
         self._addr = addr
-        self._port = port
+        self._ports = ports if ports is not None else list(DEFAULT_GC_PORTS)
         self._callback: Optional[Callable] = None
-        self._receiver = MulticastReceiver(addr, port)
+        self._receiver = DualPortReceiver(addr, self._ports)
         self._receiver.set_callback(self._on_data)
         self._proto_available = False
         self._try_import_proto()
@@ -59,11 +60,21 @@ class GCClient:
     async def start(self, loop: asyncio.AbstractEventLoop) -> None:
         """Start receiving GC data."""
         await self._receiver.start(loop)
-        logger.info(f"GCClient started: {self._addr}:{self._port}")
+        logger.info(f"GCClient started: {self._addr} ports={self._ports}")
 
     def stop(self) -> None:
         """Stop receiving GC data."""
         self._receiver.stop()
+
+    @property
+    def active_port(self) -> int:
+        return self._receiver.active_port
+
+    def switch_port(self, port: int) -> bool:
+        return self._receiver.switch_port(port)
+
+    def get_port_status(self) -> dict:
+        return self._receiver.get_port_status()
 
     def _on_data(self, data: bytes) -> None:
         """Handle raw UDP data."""

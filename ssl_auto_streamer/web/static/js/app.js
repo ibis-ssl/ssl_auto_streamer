@@ -106,6 +106,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.code === 'Space') stopPTT();
   });
 
+  // Overlay controls (embedded)
+  document.getElementById('toggle-hud').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_hud', value: e.target.checked });
+  });
+
+  document.getElementById('toggle-sound').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'sound_enabled', value: e.target.checked });
+  });
+
+  document.getElementById('send-ticker-btn').addEventListener('click', () => {
+    const input = document.getElementById('ticker-text');
+    const text = input.value.trim();
+    if (!text) return;
+    wsClient.send({ type: 'overlay_control', action: 'manual_ticker', text, duration: 5000 });
+    input.value = '';
+  });
+
   // Connect WebSocket
   wsClient = createWSClient({
     onOpen:    () => setWSStatus('connected', '接続中'),
@@ -241,6 +258,9 @@ function updateStatusIndicators(status) {
   setStatusDot('status-gemini', status.gemini_connected, 'Gemini API');
   setStatusDot('status-tracker', status.tracker_receiving, 'Vision Tracker');
   setStatusDot('status-gc', status.gc_receiving, 'Game Controller');
+  if (typeof updatePortStatusUI === 'function') {
+    updatePortStatusUI(status.port_status);
+  }
 }
 
 function setStatusDot(id, ok, label) {

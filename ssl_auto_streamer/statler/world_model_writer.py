@@ -162,6 +162,10 @@ class WorldModelWriter:
         self._possession_time_yellow: float = 0.0
         self._last_possession_update_time: Optional[float] = None
 
+        # Field geometry (updated from SSL Vision geometry packets; default: Div.A)
+        self._field_length: float = 12.0  # [m]
+        self._field_width: float = 9.0    # [m]
+
         # Detailed event history
         self._event_history: deque[dict] = deque(maxlen=50)
 
@@ -197,6 +201,20 @@ class WorldModelWriter:
             self._context.yellow_score = yellow_score
             self._context.elapsed_seconds = elapsed_seconds
             self._update_momentum()
+
+    def update_from_geometry(self, geometry: Any) -> None:
+        """Update field dimensions from SSL_GeometryData protobuf message."""
+        try:
+            field = geometry.field
+            # SSL Vision geometry is in millimeters; convert to meters
+            length_m = field.field_length / 1000.0
+            width_m = field.field_width / 1000.0
+            with self._lock:
+                if self._field_length != length_m or self._field_width != width_m:
+                    self._field_length = length_m
+                    self._field_width = width_m
+        except Exception:
+            pass
 
     def update_from_tracker(self, frame: Any) -> None:
         """Update robot and ball state from TrackedFrame protobuf message."""
@@ -798,13 +816,15 @@ class WorldModelWriter:
         }
 
     def _get_position_zone(self, x: float) -> str:
-        if x < -4.0:
+        half = self._field_length / 2.0
+        t1, t2 = half * 0.67, half * 0.33
+        if x < -t1:
             return "goal_area"
-        elif x < -2.0:
+        elif x < -t2:
             return "defense"
-        elif x < 2.0:
+        elif x < t2:
             return "midfield"
-        elif x < 4.0:
+        elif x < t1:
             return "attack"
         else:
             return "opponent_goal_area"
@@ -898,7 +918,8 @@ class WorldModelWriter:
             blue_attacks_positive = not self._blue_team_on_positive_half
         else:
             blue_attacks_positive = True
-        goal_x = 6.0 if (team == "blue") == blue_attacks_positive else -6.0
+        half = self._field_length / 2.0
+        goal_x = half if (team == "blue") == blue_attacks_positive else -half
         return round(
             math.hypot(
                 position.get("x", 0) - goal_x, position.get("y", 0)
@@ -908,7 +929,7 @@ class WorldModelWriter:
 
     def _estimate_shot_angle(self, data: Dict[str, Any]) -> float:
         pos = data.get("position", {"x": 0, "y": 0})
-        dx = 6.0 - pos.get("x", 0)
+        dx = self._field_length / 2.0 - pos.get("x", 0)
         dy = 0 - pos.get("y", 0)
         return round(math.degrees(math.atan2(dy, dx)), 1)
 

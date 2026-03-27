@@ -23,10 +23,18 @@ reading_manager:
   model: gemini-3.1-flash-lite-preview
   timeout_seconds: 3
 ssl:
+  vision_addr: 224.5.23.1
+  vision_ports:
+  - 10006
+  - 10020
   gc_addr: 224.5.23.1
-  gc_port: 10003
+  gc_ports:
+  - 10003
+  - 11003
   tracker_addr: 224.5.23.2
-  tracker_port: 10010
+  tracker_ports:
+  - 10010
+  - 11010
 voicevox:
   host: http://localhost:50021
   speaker: 3

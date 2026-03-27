@@ -49,6 +49,8 @@ class WebServer:
         on_stop_streaming: Optional[Callable[[], None]] = None,
         get_streaming: Optional[Callable[[], bool]] = None,
         get_pipeline_snapshot: Optional[Callable[[], Optional[Dict[str, Any]]]] = None,
+        on_switch_port: Optional[Callable[[str, int], bool]] = None,
+        get_port_status: Optional[Callable[[], Dict[str, Any]]] = None,
     ):
         self._host = host
         self._port = port
@@ -62,6 +64,8 @@ class WebServer:
         self._on_stop_streaming = on_stop_streaming
         self._get_streaming = get_streaming
         self._get_pipeline_snapshot = get_pipeline_snapshot
+        self._on_switch_port = on_switch_port
+        self._get_port_status = get_port_status
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=10)
@@ -90,6 +94,7 @@ class WebServer:
         self._app.router.add_get("/api/team-profiles", self._handle_get_team_profiles)
         self._app.router.add_post("/api/streaming/start", self._handle_streaming_start)
         self._app.router.add_post("/api/streaming/stop", self._handle_streaming_stop)
+        self._app.router.add_post("/api/ssl/switch-port", self._handle_switch_port)
         if self._static_dir.exists():
             self._app.router.add_static("/static", self._static_dir)
 
@@ -178,12 +183,15 @@ class WebServer:
         """Build system status dict (used by both broadcast and REST API)."""
         now = time.time()
         streaming = self._get_streaming() if self._get_streaming else False
-        return {
+        status = {
             "gemini_connected": self._gemini_client.is_connected(),
             "tracker_receiving": (now - self._tracker_last_seen) < _RECEIVER_TIMEOUT_SEC,
             "gc_receiving": (now - self._gc_last_seen) < _RECEIVER_TIMEOUT_SEC,
             "streaming": streaming,
         }
+        if self._get_port_status:
+            status["port_status"] = self._get_port_status()
+        return status
 
     @staticmethod
     def _safe_call(method: Callable, default: Any = None) -> Any:
@@ -390,6 +398,27 @@ class WebServer:
         """Stop the commentary pipeline."""
         if self._on_stop_streaming:
             self._on_stop_streaming()
+        return web.json_response({"success": True})
+
+    async def _handle_switch_port(self, request: web.Request) -> web.Response:
+        """Switch the active port for a given SSL data source."""
+        try:
+            data = await request.json()
+        except Exception:
+            return web.json_response({"error": "Invalid JSON"}, status=400)
+
+        source = data.get("source")  # "tracker", "gc", or "vision"
+        port = data.get("port")
+        if source is None or port is None:
+            return web.json_response({"error": "Missing 'source' or 'port'"}, status=400)
+
+        if self._on_switch_port is None:
+            return web.json_response({"error": "Port switching not available"}, status=503)
+
+        success = self._on_switch_port(source, int(port))
+        if not success:
+            return web.json_response({"error": f"Invalid source or port: {source}:{port}"}, status=400)
+
         return web.json_response({"success": True})
 
     async def _handle_get_status(self, request: web.Request) -> web.Response:

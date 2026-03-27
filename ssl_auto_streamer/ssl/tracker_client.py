@@ -8,14 +8,14 @@
 
 import asyncio
 import logging
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
-from .multicast_receiver import MulticastReceiver
+from .dual_port_receiver import DualPortReceiver
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TRACKER_ADDR = "224.5.23.2"
-DEFAULT_TRACKER_PORT = 10010
+DEFAULT_TRACKER_PORTS = [10010, 11010]
 
 
 class TrackerClient:
@@ -24,17 +24,18 @@ class TrackerClient:
 
     Parses protobuf and delivers TrackedFrame objects to a callback.
     Falls back to raw bytes callback if protobuf is not compiled.
+    Listens on two ports simultaneously and auto-switches to the active one.
     """
 
     def __init__(
         self,
         addr: str = DEFAULT_TRACKER_ADDR,
-        port: int = DEFAULT_TRACKER_PORT,
+        ports: Optional[List[int]] = None,
     ):
         self._addr = addr
-        self._port = port
+        self._ports = ports if ports is not None else list(DEFAULT_TRACKER_PORTS)
         self._callback: Optional[Callable] = None
-        self._receiver = MulticastReceiver(addr, port)
+        self._receiver = DualPortReceiver(addr, self._ports)
         self._receiver.set_callback(self._on_data)
         self._proto_available = False
         self._try_import_proto()
@@ -59,11 +60,21 @@ class TrackerClient:
     async def start(self, loop: asyncio.AbstractEventLoop) -> None:
         """Start receiving tracker data."""
         await self._receiver.start(loop)
-        logger.info(f"TrackerClient started: {self._addr}:{self._port}")
+        logger.info(f"TrackerClient started: {self._addr} ports={self._ports}")
 
     def stop(self) -> None:
         """Stop receiving tracker data."""
         self._receiver.stop()
+
+    @property
+    def active_port(self) -> int:
+        return self._receiver.active_port
+
+    def switch_port(self, port: int) -> bool:
+        return self._receiver.switch_port(port)
+
+    def get_port_status(self) -> dict:
+        return self._receiver.get_port_status()
 
     def _on_data(self, data: bytes) -> None:
         """Handle raw UDP data."""

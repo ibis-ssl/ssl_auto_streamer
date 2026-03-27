@@ -50,12 +50,16 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     if args.tracker_addr:
         config["ssl"]["tracker_addr"] = args.tracker_addr
-    if args.tracker_port:
-        config["ssl"]["tracker_port"] = args.tracker_port
+    if args.tracker_ports:
+        config["ssl"]["tracker_ports"] = args.tracker_ports
     if args.gc_addr:
         config["ssl"]["gc_addr"] = args.gc_addr
-    if args.gc_port:
-        config["ssl"]["gc_port"] = args.gc_port
+    if args.gc_ports:
+        config["ssl"]["gc_ports"] = args.gc_ports
+    if args.vision_addr:
+        config["ssl"]["vision_addr"] = args.vision_addr
+    if args.vision_ports:
+        config["ssl"]["vision_ports"] = args.vision_ports
 
     if args.web_port is not None:
         if args.web_port == 0:
@@ -87,10 +91,12 @@ def main() -> None:
         help="SSL Vision Tracker multicast address (default: 224.5.23.2)",
     )
     parser.add_argument(
-        "--tracker-port",
+        "--tracker-ports",
         type=int,
+        nargs=2,
         default=None,
-        help="SSL Vision Tracker port (default: 10010)",
+        metavar=("PORT_A", "PORT_B"),
+        help="SSL Vision Tracker ports (default: 10010 11010)",
     )
     parser.add_argument(
         "--gc-addr",
@@ -98,10 +104,25 @@ def main() -> None:
         help="SSL Game Controller multicast address (default: 224.5.23.1)",
     )
     parser.add_argument(
-        "--gc-port",
+        "--gc-ports",
         type=int,
+        nargs=2,
         default=None,
-        help="SSL Game Controller port (default: 10003)",
+        metavar=("PORT_A", "PORT_B"),
+        help="SSL Game Controller ports (default: 10003 11003)",
+    )
+    parser.add_argument(
+        "--vision-addr",
+        default=None,
+        help="SSL Vision multicast address (default: 224.5.23.1)",
+    )
+    parser.add_argument(
+        "--vision-ports",
+        type=int,
+        nargs=2,
+        default=None,
+        metavar=("PORT_A", "PORT_B"),
+        help="SSL Vision ports (default: 10006 10020)",
     )
     parser.add_argument(
         "--log-level",

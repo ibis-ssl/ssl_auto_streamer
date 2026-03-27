@@ -1,0 +1,11 @@
+syntax = "proto2";
+
+// Default network address for SSL-Vision: 224.5.23.1:10006 or 224.5.23.1:10020
+
+import "ssl_vision_detection.proto";
+import "ssl_vision_geometry.proto";
+
+message SSL_WrapperPacket {
+    optional SSL_DetectionFrame detection = 1;
+    optional SSL_GeometryData geometry = 2;
+}

@@ -18,7 +18,6 @@
     <button class="tab-btn active" id="tab-dashboard">ダッシュボード</button>
     <button class="tab-btn" id="tab-settings">設定</button>
     <a class="tab-btn" href="/overlay" target="_blank" title="OBSオーバーレイを開く">配信オーバーレイ</a>
-    <a class="tab-btn" href="/overlay-control" target="_blank" title="オーバーレイ制御">制御</a>
   </nav>
   <button class="tab-btn" id="sound-toggle-btn" title="効果音のON/OFF">🔊 効果音</button>
   <div id="ws-status">
@@ -136,6 +135,35 @@
         </div>
       </div>
 
+      <!-- Overlay Control -->
+      <div class="panel" id="overlay-ctrl-panel">
+        <div class="panel-header">オーバーレイ制御</div>
+        <div class="panel-body overlay-ctrl-body">
+          <div class="toggle-row">
+            <span>スコアバー表示</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-hud" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="toggle-row">
+            <span>効果音 (オーバーレイ側)</span>
+            <label class="switch">
+              <input type="checkbox" id="toggle-sound" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="overlay-ctrl-ticker">
+            <input type="text" id="ticker-text" placeholder="手動テロップ">
+            <button class="btn btn-primary" id="send-ticker-btn">送信</button>
+          </div>
+          <a class="overlay-link" id="overlay-link" href="/overlay" target="_blank">
+            <span class="material-symbols-rounded" style="font-size:14px">open_in_new</span>
+            OBSオーバーレイを開く
+          </a>
+        </div>
+      </div>
+
       <!-- Event Log -->
       <div class="panel flex-fill" id="event-log-panel">
         <div class="panel-header">イベントログ (直近20件)</div>
@@ -155,21 +183,38 @@
       <!-- SSL Settings -->
       <div class="settings-section">
         <div class="panel-header">SSL 設定</div>
+
+        <!-- Port Status & Switching -->
+        <div class="form-group">
+          <label>ポート状態 / 手動切替</label>
+          <div class="port-switch-group" id="port-switch-vision">
+            <span class="port-label">Vision</span>
+            <button class="btn btn-port" id="btn-vision-0" onclick="switchPort('vision', 0)">10006</button>
+            <button class="btn btn-port" id="btn-vision-1" onclick="switchPort('vision', 1)">10020</button>
+          </div>
+          <div class="port-switch-group" id="port-switch-gc">
+            <span class="port-label">GC</span>
+            <button class="btn btn-port" id="btn-gc-0" onclick="switchPort('gc', 0)">10003</button>
+            <button class="btn btn-port" id="btn-gc-1" onclick="switchPort('gc', 1)">11003</button>
+          </div>
+          <div class="port-switch-group" id="port-switch-tracker">
+            <span class="port-label">Tracker</span>
+            <button class="btn btn-port" id="btn-tracker-0" onclick="switchPort('tracker', 0)">10010</button>
+            <button class="btn btn-port" id="btn-tracker-1" onclick="switchPort('tracker', 1)">11010</button>
+          </div>
+        </div>
+
         <div class="form-group">
           <label for="cfg-tracker-addr">Tracker アドレス</label>
           <input type="text" id="cfg-tracker-addr" placeholder="224.5.23.2">
-        </div>
-        <div class="form-group">
-          <label for="cfg-tracker-port">Tracker ポート</label>
-          <input type="number" id="cfg-tracker-port" placeholder="10010">
         </div>
         <div class="form-group">
           <label for="cfg-gc-addr">GC アドレス</label>
           <input type="text" id="cfg-gc-addr" placeholder="224.5.23.1">
         </div>
         <div class="form-group">
-          <label for="cfg-gc-port">GC ポート</label>
-          <input type="number" id="cfg-gc-port" placeholder="10003">
+          <label for="cfg-vision-addr">Vision アドレス</label>
+          <input type="text" id="cfg-vision-addr" placeholder="224.5.23.1">
         </div>
       </div>
 

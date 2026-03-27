@@ -29,6 +29,7 @@ from ssl_auto_streamer.audio import PcmAudioOutput, VoicevoxTTS, UtteranceQueue,
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
 from ssl_auto_streamer.ssl.tracker_client import TrackerClient
 from ssl_auto_streamer.ssl.gc_client import GCClient
+from ssl_auto_streamer.ssl.vision_client import VisionClient
 from ssl_auto_streamer.web.server import WebServer
 
 logger = logging.getLogger(__name__)
@@ -167,16 +168,24 @@ class CommentaryApp:
             )
 
         # SSL clients
+        tracker_ports = ssl_cfg.get("tracker_ports", [10010, 11010])
+        gc_ports = ssl_cfg.get("gc_ports", [10003, 11003])
+        vision_ports = ssl_cfg.get("vision_ports", [10006, 10020])
         self._tracker_client = TrackerClient(
             addr=ssl_cfg.get("tracker_addr", "224.5.23.2"),
-            port=ssl_cfg.get("tracker_port", 10010),
+            ports=tracker_ports,
         )
         self._gc_client = GCClient(
             addr=ssl_cfg.get("gc_addr", "224.5.23.1"),
-            port=ssl_cfg.get("gc_port", 10003),
+            ports=gc_ports,
+        )
+        self._vision_client = VisionClient(
+            addr=ssl_cfg.get("vision_addr", "224.5.23.1"),
+            ports=vision_ports,
         )
         self._tracker_client.set_callback(self._on_tracker_frame)
         self._gc_client.set_callback(self._on_referee_message)
+        self._vision_client.set_geometry_callback(self._on_vision_geometry)
 
         # Commentary settings
         self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
@@ -215,6 +224,8 @@ class CommentaryApp:
                     lambda: self._utterance_queue.get_pipeline_snapshot()
                     if self._utterance_queue else None
                 ),
+                on_switch_port=self._on_switch_port,
+                get_port_status=self._get_port_status,
             )
 
         # パイプラインイベントを WebServer に橋渡し
@@ -307,6 +318,12 @@ class CommentaryApp:
         except Exception as e:
             logger.error(f"Failed to start GC client: {e}")
 
+        try:
+            await self._vision_client.start(loop)
+            logger.info("Vision client started")
+        except Exception as e:
+            logger.error(f"Failed to start vision client: {e}")
+
         logger.info("Waiting for start command from dashboard...")
 
         # Run main loop tasks (Gemini connection is initiated via dashboard)
@@ -384,6 +401,7 @@ class CommentaryApp:
 
         self._tracker_client.stop()
         self._gc_client.stop()
+        self._vision_client.stop()
 
         if self._connected:
             await self._gemini_client.disconnect()
@@ -413,6 +431,31 @@ class CommentaryApp:
                 self._on_detected_event(event)
         except Exception as e:
             logger.debug(f"Tracker frame processing error: {e}")
+
+    def _on_switch_port(self, source: str, port: int) -> bool:
+        """Switch the active port for a given SSL data source."""
+        if source == "tracker":
+            return self._tracker_client.switch_port(port)
+        elif source == "gc":
+            return self._gc_client.switch_port(port)
+        elif source == "vision":
+            return self._vision_client.switch_port(port)
+        return False
+
+    def _get_port_status(self) -> Dict[str, Any]:
+        """Return port status for all SSL data sources."""
+        return {
+            "tracker": self._tracker_client.get_port_status(),
+            "gc": self._gc_client.get_port_status(),
+            "vision": self._vision_client.get_port_status(),
+        }
+
+    def _on_vision_geometry(self, geometry: Any) -> None:
+        """Handle SSL_GeometryData from VisionClient."""
+        try:
+            self._writer.update_from_geometry(geometry)
+        except Exception as e:
+            logger.debug(f"Vision geometry processing error: {e}")
 
     def _on_referee_message(self, referee: Any) -> None:
         """Handle Referee message from GCClient."""
