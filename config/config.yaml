@@ -12,7 +12,6 @@ commentary:
   mode: reflex_analyst
   writer_update_rate: 1
 gemini:
-  api_key: ''
   model: gemini-3.1-flash-live-preview
   output_transcription: true
   response_mode: text
