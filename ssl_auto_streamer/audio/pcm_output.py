@@ -6,6 +6,7 @@
 
 """PCM Audio Output using PyAudio (matching Google's official sample)."""
 
+import asyncio
 import logging
 import threading
 from typing import Optional
@@ -45,6 +46,8 @@ class PcmAudioOutput:
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
         self._flush_event = threading.Event()
+        self._drain_complete = threading.Event()
+        self._drain_complete.set()  # 初期状態は空（ドレイン済み）
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._pyaudio: Optional[pyaudio.PyAudio] = None
@@ -110,12 +113,18 @@ class PcmAudioOutput:
 
         logger.info("Audio output stopped")
 
+    @property
+    def is_playing(self) -> bool:
+        """音声バッファにデータが残っているかどうか。"""
+        return not self._drain_complete.is_set()
+
     def play(self, pcm_data: bytes) -> None:
         """Append PCM audio data to playback buffer."""
         if not self._running:
             return
         with self._lock:
             self._buffer.extend(pcm_data)
+            self._drain_complete.clear()  # バッファにデータあり
 
     def flush_buffer(self) -> None:
         """Signal playback thread to drain remaining bytes (call on turn_complete)."""
@@ -125,6 +134,12 @@ class PcmAudioOutput:
         """Discard all buffered audio (for barge-in support)."""
         with self._lock:
             self._buffer.clear()
+        self._drain_complete.set()  # クリアされたのでドレイン済みとみなす
+
+    async def wait_until_drained(self, timeout: float = 30.0) -> bool:
+        """バッファが空になるまで待機する（asyncio対応）。タイムアウト時はFalseを返す。"""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, self._drain_complete.wait, timeout)
 
     def _playback_loop(self) -> None:
         """Background thread: drain buffer in fixed-size blocks."""
@@ -141,6 +156,11 @@ class PcmAudioOutput:
                     self._flush_event.clear()
                 else:
                     chunk = None
+                    # バッファが空になった（フラッシュ済みまたは元々空）
+                    if not self._buffer:
+                        if self._flush_event.is_set():
+                            self._flush_event.clear()
+                        self._drain_complete.set()
 
             if chunk:
                 try:
@@ -148,6 +168,10 @@ class PcmAudioOutput:
                         self._stream.write(chunk, exception_on_underflow=False)
                 except Exception as e:
                     logger.error(f"Playback error: {e}")
+                # チャンク再生後にバッファが空になったか確認
+                with self._lock:
+                    if not self._buffer:
+                        self._drain_complete.set()
             else:
                 # Wait until stop is signalled or next check interval
                 self._stop_event.wait(timeout=0.005)
