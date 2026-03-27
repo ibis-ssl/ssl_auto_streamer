@@ -116,7 +116,13 @@ class UtteranceQueue:
         utt = Utterance(text=text, priority=priority, event_type=event_type, id=self._id_counter)
         self._pending.append(utt)
         self._pending_event.set()
-        self._emit("enqueue", {"id": utt.id, "text": text, "priority": priority, "event_type": event_type})
+        self._emit("enqueue", {
+            "id": utt.id,
+            "text": text,
+            "priority": priority,
+            "event_type": event_type,
+            "pending_count": len(self._pending),
+        })
 
     def interrupt(self, new_priority: int) -> None:
         """
@@ -168,7 +174,13 @@ class UtteranceQueue:
 
             if len(candidates) == 1:
                 selected = candidates
-                self._emit("select", {"id": candidates[0].id, "text": candidates[0].text})
+                self._emit("select", {
+                    "id": candidates[0].id,
+                    "text": candidates[0].text,
+                    "candidates": 1,
+                    "selected": 1,
+                    "select_method": "direct",
+                })
             else:
                 game_context = self._build_game_context()
                 recently = list(self._recently_spoken)
@@ -182,16 +194,29 @@ class UtteranceQueue:
                     continue
                 selected_set = set(indices)
                 selected = [candidates[i] for i in indices]
-                dropped = len(candidates) - len(selected)
+                num_candidates = len(candidates)
+                num_selected = len(selected)
+                dropped = num_candidates - num_selected
                 if dropped:
                     logger.info(
-                        f"ReadingManager dropped {dropped}/{len(candidates)} utterances"
+                        f"ReadingManager dropped {dropped}/{num_candidates} utterances"
                     )
                 for i, u in enumerate(candidates):
                     if i in selected_set:
-                        self._emit("select", {"id": u.id, "text": u.text})
+                        self._emit("select", {
+                            "id": u.id,
+                            "text": u.text,
+                            "candidates": num_candidates,
+                            "selected": num_selected,
+                            "select_method": "reading_manager",
+                        })
                     else:
-                        self._emit("discard", {"id": u.id, "text": u.text})
+                        self._emit("discard", {
+                            "id": u.id,
+                            "text": u.text,
+                            "candidates": num_candidates,
+                            "reason": "reading_manager",
+                        })
 
             self._cancel_event.clear()
             self._is_synthesizing = True

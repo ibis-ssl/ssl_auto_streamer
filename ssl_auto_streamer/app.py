@@ -25,7 +25,7 @@ from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME,
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
 from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent, ThinkingLevel, TextCommentaryClient, ReadingManager
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
-from ssl_auto_streamer.audio import PcmAudioOutput, VoicevoxTTS, UtteranceQueue, GameCommandAnnouncer, GAME_COMMAND_TYPES
+from ssl_auto_streamer.audio import PcmAudioOutput, VoicevoxTTS, UtteranceQueue, GameCommandAnnouncer, GAME_COMMAND_TYPES, PipelineLogger
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
 from ssl_auto_streamer.ssl.tracker_client import TrackerClient
 from ssl_auto_streamer.ssl.gc_client import GCClient
@@ -228,8 +228,16 @@ class CommentaryApp:
                 get_port_status=self._get_port_status,
             )
 
-        # パイプラインイベントを WebServer に橋渡し
-        if self._utterance_queue and self._web_server:
+        # PipelineLogger (text モードのみ)
+        self._pipeline_logger: Optional[PipelineLogger] = None
+        if self._utterance_queue:
+            log_cfg = config.get("pipeline_log", {})
+            if log_cfg.get("enabled", True):
+                log_dir = log_cfg.get("dir", "logs/pipeline")
+                self._pipeline_logger = PipelineLogger(log_dir=log_dir)
+
+        # パイプラインイベントを WebServer と PipelineLogger に橋渡し
+        if self._utterance_queue:
             self._utterance_queue.set_pipeline_callback(self._on_pipeline_event)
 
         # Event cooldowns
@@ -416,6 +424,9 @@ class CommentaryApp:
 
         if self._web_server:
             await self._web_server.stop()
+
+        if self._pipeline_logger:
+            self._pipeline_logger.close()
 
         logger.info("Shutdown complete")
 
@@ -666,9 +677,11 @@ class CommentaryApp:
             self._tts_buffer = parts[-1]
 
     def _on_pipeline_event(self, event: str, data: Dict[str, Any]) -> None:
-        """UtteranceQueue のパイプラインイベントを WebServer に転送する。"""
+        """UtteranceQueue のパイプラインイベントを WebServer と PipelineLogger に転送する。"""
         if self._web_server:
             self._web_server.push_pipeline_event(event, data)
+        if self._pipeline_logger:
+            self._pipeline_logger.on_event(event, data)
 
     def _on_transcription_received(self, text: str) -> None:
         """Handle output audio transcription from Gemini (audio mode)."""
