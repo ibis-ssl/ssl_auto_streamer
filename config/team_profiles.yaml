@@ -135,6 +135,14 @@ profiles:
       - "2026年世界大会Div.B出場確定"
     style: "バランス型"
     famous_for: "全国の有志が集う社会人チーム"
+  "ZUNOH Robotics":
+    reading: "ズノウロボティクス"
+    country: "日本"
+    characteristics:
+      - "ScienceTokyoの新規チーム"
+      - "一台で攻守を兼任し、初出場ながら大会で得点を決めている"
+    style: "バランス型"
+    famous_for: "新規チーム"
   "opponent":
     reading: "相手チーム"
     country: "不明"
