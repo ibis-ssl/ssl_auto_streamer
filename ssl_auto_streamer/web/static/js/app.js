@@ -168,8 +168,6 @@ function handleMessage(msg) {
     appendCommentary(msg);
   } else if (msg.type === 'transcription') {
     updateTranscription(msg.text);
-  } else if (msg.type === 'pipeline') {
-    appendPipelineEvent(msg);
   }
 }
 
@@ -182,8 +180,6 @@ function updateDashboard(state) {
   updateField(state);
   renderEventLog(state.event_log || []);
   renderCommentaryHistory(state.commentary_history || []);
-  updatePipelineSnapshot(state.pipeline_snapshot);
-  if (state.pipeline_log) renderPipelineLog(state.pipeline_log);
 }
 
 function updateTeamNames(teamInfo) {
@@ -334,81 +330,29 @@ function appendCommentary(msg) {
   renderCommentaryHistory((lastState?.commentary_history || []).concat([msg]));
 }
 
-// ===== Pipeline Monitor =====
-const _PIPELINE_LABELS = {
-  enqueue:    '追加',
-  select:     '採用',
-  discard:    '破棄',
-  speak_start:'読上開始',
-  speak_end:  '読上完了',
-  cancel:     'キャンセル',
-  interrupt:  '割込',
-  clear:      'クリア',
-};
-
-function updatePipelineSnapshot(snapshot) {
-  const currentEl = document.getElementById('pipeline-current');
-  const pendingEl = document.getElementById('pipeline-pending');
-  if (!currentEl || !pendingEl) return;
-
-  const speakingText = snapshot?.current_speaking?.text || '';
-  if (speakingText !== _lastSpeakingText) {
-    _lastSpeakingText = speakingText;
-    document.getElementById('speaking-banner-text').textContent = speakingText;
-    document.getElementById('speaking-banner').classList.toggle('hidden', !speakingText);
-  }
-
-  // 読み上げ中 / 合成中
-  if (snapshot?.current_speaking) {
-    currentEl.innerHTML =
-      `<div class="pipeline-speaking-row">`
-      + `<span class="pipeline-badge speaking">読上中</span>`
-      + `<span class="pipeline-text">${escapeHtml(snapshot.current_speaking.text)}</span></div>`;
-  } else if (snapshot?.is_synthesizing) {
-    currentEl.innerHTML =
-      `<div class="pipeline-speaking-row">`
-      + `<span class="pipeline-badge synthesizing">合成中...</span></div>`;
-  } else {
-    currentEl.innerHTML = '';
-  }
-
-  // 待機キュー
-  if (snapshot?.pending?.length > 0) {
-    pendingEl.innerHTML = snapshot.pending.map(u =>
-      `<div class="pipeline-pending-row">`
-      + `<span class="pipeline-badge pending">待機</span>`
-      + `<span class="pipeline-priority">P${u.priority}</span>`
-      + `<span class="pipeline-text">${escapeHtml(u.text)}</span></div>`
-    ).join('');
-  } else if (snapshot != null) {
-    pendingEl.innerHTML = '<div class="pipeline-empty">キュー空</div>';
-  } else {
-    pendingEl.innerHTML = '<div class="pipeline-empty">テキストモード以外では非表示</div>';
-  }
-}
-
-function renderPipelineLog(events) {
-  renderLogList('pipeline-log-list', events.slice(-12), entry => {
-    const label = _PIPELINE_LABELS[entry.event] || entry.event;
-    const text = entry.data?.text
-      ? escapeHtml(entry.data.text.slice(0, 36))
-      : (entry.data?.dropped_count != null ? `${entry.data.dropped_count}件破棄` : '');
-    return `<span class="pipeline-badge ${entry.event}">${label}</span>`
-      + (text ? `<span class="pipeline-log-text">${text}</span>` : '');
-  });
-}
-
-function appendPipelineEvent(msg) {
-  renderPipelineLog((lastState?.pipeline_log || []).concat([msg]));
-}
-
 let _transcriptionClearTimer = null;
 function updateTranscription(text) {
   const el = document.getElementById('transcription-text');
-  if (!el) return;
-  el.textContent = text;
+  if (el) el.textContent = text;
+
+  const banner = document.getElementById('speaking-banner');
+  const bannerText = document.getElementById('speaking-banner-text');
+  if (banner && bannerText && text !== _lastSpeakingText) {
+    _lastSpeakingText = text;
+    bannerText.textContent = text;
+    banner.classList.toggle('hidden', !text);
+  }
+
   if (_transcriptionClearTimer) clearTimeout(_transcriptionClearTimer);
-  _transcriptionClearTimer = setTimeout(() => { el.textContent = ''; }, 8000);
+  if (text) {
+    _transcriptionClearTimer = setTimeout(() => {
+      const el2 = document.getElementById('transcription-text');
+      if (el2) el2.textContent = '';
+      const banner2 = document.getElementById('speaking-banner');
+      if (banner2) banner2.classList.add('hidden');
+      _lastSpeakingText = '';
+    }, 8000);
+  }
 }
 
 // ===== Utilities =====
