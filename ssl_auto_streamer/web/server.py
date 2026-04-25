@@ -48,7 +48,6 @@ class WebServer:
         on_start_streaming: Optional[Callable[[], None]] = None,
         on_stop_streaming: Optional[Callable[[], None]] = None,
         get_streaming: Optional[Callable[[], bool]] = None,
-        get_pipeline_snapshot: Optional[Callable[[], Optional[Dict[str, Any]]]] = None,
         on_switch_port: Optional[Callable[[str, int], bool]] = None,
         get_port_status: Optional[Callable[[], Dict[str, Any]]] = None,
     ):
@@ -63,14 +62,12 @@ class WebServer:
         self._on_start_streaming = on_start_streaming
         self._on_stop_streaming = on_stop_streaming
         self._get_streaming = get_streaming
-        self._get_pipeline_snapshot = get_pipeline_snapshot
         self._on_switch_port = on_switch_port
         self._get_port_status = get_port_status
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=10)
         self._event_log: Deque[Dict[str, Any]] = deque(maxlen=20)
-        self._pipeline_log: Deque[Dict[str, Any]] = deque(maxlen=30)
         self._tracker_last_seen: float = 0.0
         self._gc_last_seen: float = 0.0
         # Keep strong references to fire-and-forget tasks to prevent GC
@@ -141,14 +138,6 @@ class WebServer:
             json.dumps({"type": "transcription", "text": text, "timestamp": time.time()}, ensure_ascii=False)
         ))
 
-    def push_pipeline_event(self, event: str, data: Dict[str, Any]) -> None:
-        """Push a pipeline lifecycle event to connected WebSocket clients."""
-        entry = {"event": event, "data": data, "timestamp": time.time()}
-        self._pipeline_log.append(entry)
-        self._fire_and_forget(self._broadcast(
-            json.dumps({"type": "pipeline", **entry}, ensure_ascii=False)
-        ))
-
     def update_tracker_seen(self) -> None:
         """Mark that a tracker frame was received."""
         self._tracker_last_seen = time.time()
@@ -211,9 +200,6 @@ class WebServer:
         cards = self._safe_call(self._writer.get_team_cards_and_fouls_data)
 
         team_info = self._build_team_info()
-        pipeline_snapshot = None
-        if self._get_pipeline_snapshot:
-            pipeline_snapshot = self._safe_call(self._get_pipeline_snapshot)
         return {
             "type": "state",
             "game_state": game_state,
@@ -226,8 +212,6 @@ class WebServer:
             "commentary_history": list(self._commentary_history),
             "event_log": list(self._event_log),
             "team_info": team_info,
-            "pipeline_snapshot": pipeline_snapshot,
-            "pipeline_log": list(self._pipeline_log),
         }
 
     def _build_team_info(self) -> Dict[str, Any]:

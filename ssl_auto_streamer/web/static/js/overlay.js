@@ -72,6 +72,8 @@ function handleMessage(msg) {
     handleEvent(msg);
   } else if (msg.type === 'commentary') {
     showTicker(msg.text, 'commentary', 7000);
+  } else if (msg.type === 'transcription') {
+    updateSubtitle(msg.text);
   } else if (msg.type === 'overlay_control') {
     applyControl(msg);
   }
@@ -114,9 +116,7 @@ function updateHUD(state) {
     updateStatsPanel(state.match_stats);
   }
 
-  // 字幕 (current_speaking は {id, text} オブジェクト)
-  const speaking = state.pipeline_snapshot?.current_speaking?.text || '';
-  updateSubtitle(speaking);
+  // 字幕は transcription イベントで更新（HUD更新では変更しない）
 }
 
 function setTeamSide(side, name, score) {

@@ -2,7 +2,5 @@
 from .live_api_client import GeminiLiveApiClient, GeminiConfig, ThinkingLevel
 from .function_handler import FunctionHandler
 from .analysis_agent import AnalysisAgent
-from .text_commentary_client import TextCommentaryClient
-from .reading_manager import ReadingManager
 
-__all__ = ["GeminiLiveApiClient", "GeminiConfig", "ThinkingLevel", "FunctionHandler", "AnalysisAgent", "TextCommentaryClient", "ReadingManager"]
+__all__ = ["GeminiLiveApiClient", "GeminiConfig", "ThinkingLevel", "FunctionHandler", "AnalysisAgent"]
