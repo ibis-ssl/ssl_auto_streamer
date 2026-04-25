@@ -20,12 +20,12 @@ ssl:
   vision_addr: 224.5.23.1
   vision_ports:
   - 10006
-  - 10020
+  - 10006
   gc_addr: 224.5.23.1
   gc_ports:
   - 10003
-  - 11003
+  - 10003
   tracker_addr: 224.5.23.2
   tracker_ports:
   - 10010
-  - 11010
+  - 10010
