@@ -200,12 +200,11 @@ main {
 
 /* ===== Dashboard ===== */
 #dashboard {
-  display: flex;
   flex-direction: column;
   height: 100%;
 }
 
-#dashboard.tab-content.active { display: flex; }
+#dashboard.active { display: flex; }
 
 /* ===== Score Bar ===== */
 #score-bar {
