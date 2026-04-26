@@ -165,6 +165,10 @@ class WorldModelWriter:
         # Field geometry (updated from SSL Vision geometry packets; default: Div.A)
         self._field_length: float = 12.0  # [m]
         self._field_width: float = 9.0    # [m]
+        self._goal_width: float = 1.8     # [m]
+        self._goal_depth: float = 0.18    # [m]
+        self._penalty_depth: float = 1.8  # [m]
+        self._penalty_width: float = 3.6  # [m]
 
         # Detailed event history
         self._event_history: deque[dict] = deque(maxlen=50)
@@ -209,10 +213,20 @@ class WorldModelWriter:
             # SSL Vision geometry is in millimeters; convert to meters
             length_m = field.field_length / 1000.0
             width_m = field.field_width / 1000.0
+            goal_width_m = field.goal_width / 1000.0
+            goal_depth_m = field.goal_depth / 1000.0
             with self._lock:
-                if self._field_length != length_m or self._field_width != width_m:
+                if length_m > 0 and width_m > 0:
                     self._field_length = length_m
                     self._field_width = width_m
+                if goal_width_m > 0:
+                    self._goal_width = goal_width_m
+                if goal_depth_m > 0:
+                    self._goal_depth = goal_depth_m
+                if field.HasField("penalty_area_depth") and field.penalty_area_depth > 0:
+                    self._penalty_depth = field.penalty_area_depth / 1000.0
+                if field.HasField("penalty_area_width") and field.penalty_area_width > 0:
+                    self._penalty_width = field.penalty_area_width / 1000.0
         except Exception:
             pass
 
@@ -616,6 +630,14 @@ class WorldModelWriter:
                         "has_ball": r.has_ball_contact,
                     })
             return {
+                "field": {
+                    "length": round(self._field_length, 3),
+                    "width": round(self._field_width, 3),
+                    "goal_width": round(self._goal_width, 3),
+                    "goal_depth": round(self._goal_depth, 3),
+                    "penalty_depth": round(self._penalty_depth, 3),
+                    "penalty_width": round(self._penalty_width, 3),
+                },
                 "ball": {
                     "x": round(self._current_ball_pos[0], 3),
                     "y": round(self._current_ball_pos[1], 3),
@@ -671,9 +693,19 @@ class WorldModelWriter:
             team=team,
             position=pos,
             velocity=vel,
-            is_available=robot.visibility > 0.5,
+            is_available=self._is_tracked_robot_available(robot),
             has_ball_contact=has_ball_contact,
         )
+
+    @staticmethod
+    def _is_tracked_robot_available(robot: Any) -> bool:
+        """Treat missing optional visibility as available."""
+        try:
+            if not robot.HasField("visibility"):
+                return True
+        except (AttributeError, ValueError):
+            pass
+        return getattr(robot, "visibility", 1.0) > 0.5
 
     def _get_play_situation_detail(self) -> str:
         details = {

@@ -347,7 +347,7 @@ function setStatusDot(id, ok, label) {
 // ===== Field =====
 function updateField(state) {
   if (!fieldRenderer) return;
-  const snap = state.field_snapshot || {};
+  const snap = state.field_snapshot ? { ...state.field_snapshot } : {};
   // Attach trajectory to ball_trail from ball data
   if (state.ball && state.ball.trajectory) {
     snap.ball_trail = state.ball.trajectory.map(p => p.position);
