@@ -492,6 +492,102 @@ main {
 
 .flex-fill { flex: 1; min-height: 0; }
 
+/* ===== Game State Panel ===== */
+#game-state-panel {
+  flex-shrink: 0;
+}
+
+.game-state-body {
+  padding: 10px;
+}
+
+.game-state-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.state-cell {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-small);
+  background: rgba(226, 226, 233, 0.03);
+}
+
+.state-label {
+  display: block;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--md-sys-color-on-surface-variant);
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+
+.state-value {
+  display: block;
+  min-width: 0;
+  color: var(--md-sys-color-on-surface);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state-value.mono {
+  font-family: 'DSEG7', monospace;
+  letter-spacing: 1px;
+}
+
+.placement-state {
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-small);
+  background: rgba(226, 226, 233, 0.03);
+}
+
+.placement-state.active {
+  border-color: rgba(168, 200, 255, 0.55);
+  background: rgba(103, 177, 255, 0.10);
+}
+
+.placement-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.placement-main .state-label {
+  margin-bottom: 0;
+}
+
+.placement-main .state-value {
+  text-align: right;
+}
+
+.placement-detail-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.placement-detail-grid strong {
+  min-width: 0;
+  color: var(--md-sys-color-on-surface);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ===== Overlay Footer ===== */
 #overlay-footer {
   display: flex;
@@ -610,6 +706,31 @@ main {
 .event-type.FAST_SHOT {
   background: rgba(252, 218, 160, 0.12);
   color: var(--md-sys-color-tertiary);
+}
+
+.event-type.FOUL,
+.event-type.COLLISION,
+.event-type.INVALID_GOAL,
+.event-type.BALL_PLACEMENT_FAILED,
+.event-type.PENALTY_KICK_FAILED,
+.event-type.EMERGENCY_STOP {
+  background: rgba(255, 84, 73, 0.14);
+  color: var(--md-sys-color-error);
+}
+
+.event-type.KICKOFF,
+.event-type.PENALTY,
+.event-type.FREE_KICK,
+.event-type.BALL_PLACEMENT,
+.event-type.BALL_PLACEMENT_SUCCEEDED,
+.event-type.PREPARED {
+  background: rgba(103, 177, 255, 0.14);
+  color: var(--md-sys-color-primary);
+}
+
+.event-type.GAME_EVENT {
+  background: rgba(195, 198, 207, 0.14);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 /* ===== Settings Tab ===== */

@@ -225,6 +225,38 @@ html, body {
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ===== Field Overlay ===== */
+#field-overlay {
+  position: fixed;
+  left: 40px;
+  bottom: 150px;
+  width: 620px;
+  aspect-ratio: 3 / 2;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: none;
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#field-overlay.hidden {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+#overlay-field-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+}
+
 /* ===== スタッツパネル ===== */
 #stats-panel {
   position: fixed;
