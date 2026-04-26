@@ -13,7 +13,7 @@ commentary:
   mode: reflex_analyst
   writer_update_rate: 1
 gemini:
-  api_key: AIzaSyDEYfL8SdhNWcYoCUY_MAURp8ly9A6FMEA
+  api_key: ''  # 環境変数 GEMINI_API_KEY を使用
   model: gemini-3.1-flash-live-preview
   output_transcription: true
   sample_rate: 24000
