@@ -12,9 +12,16 @@ import logging
 import os
 import signal
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import yaml
+
+from ssl_auto_streamer.audio_mode import (
+    DEFAULT_AUDIO_OUTPUT_MODE,
+    VALID_AUDIO_OUTPUT_MODES,
+    is_valid_audio_output_mode,
+    normalize_audio_output_mode,
+)
 
 
 def load_config(args: argparse.Namespace) -> Dict[str, Any]:
@@ -66,6 +73,23 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
             config["web"]["enabled"] = False
         else:
             config["web"]["port"] = args.web_port
+
+    audio_output_mode_arg = getattr(args, "audio_output_mode", None)
+    if audio_output_mode_arg:
+        config["audio"]["output_mode"] = audio_output_mode_arg
+
+    raw_audio_output_mode = config["audio"].get(
+        "output_mode", DEFAULT_AUDIO_OUTPUT_MODE
+    )
+    if not is_valid_audio_output_mode(raw_audio_output_mode):
+        logging.getLogger(__name__).warning(
+            "Invalid audio.output_mode=%r; falling back to %s",
+            raw_audio_output_mode,
+            DEFAULT_AUDIO_OUTPUT_MODE,
+        )
+    config["audio"]["output_mode"] = normalize_audio_output_mode(
+        raw_audio_output_mode
+    )
 
     return config
 
@@ -135,6 +159,15 @@ def main() -> None:
         type=int,
         default=None,
         help="Web UI port (default: 8080, 0 to disable)",
+    )
+    parser.add_argument(
+        "--audio-output-mode",
+        choices=VALID_AUDIO_OUTPUT_MODES,
+        default=None,
+        help=(
+            "Audio output target: server, client, both, or off "
+            "(default: server)"
+        ),
     )
 
     args = parser.parse_args()

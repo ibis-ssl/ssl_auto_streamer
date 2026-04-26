@@ -7,6 +7,7 @@
 """aiohttp-based Web Server for SSL Auto Streamer UI."""
 
 import asyncio
+import base64
 import copy
 import json
 import logging
@@ -21,6 +22,11 @@ from aiohttp import web
 
 from ssl_auto_streamer.gemini import ThinkingLevel
 
+from ssl_auto_streamer.audio_mode import (
+    DEFAULT_AUDIO_OUTPUT_MODE,
+    is_valid_audio_output_mode,
+    normalize_audio_output_mode,
+)
 from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
 
 logger = logging.getLogger(__name__)
@@ -48,6 +54,7 @@ class WebServer:
         on_start_streaming: Optional[Callable[[], None]] = None,
         on_stop_streaming: Optional[Callable[[], None]] = None,
         get_streaming: Optional[Callable[[], bool]] = None,
+        get_audio_output_mode: Optional[Callable[[], str]] = None,
         on_switch_port: Optional[Callable[[str, int], bool]] = None,
         get_port_status: Optional[Callable[[], Dict[str, Any]]] = None,
     ):
@@ -62,10 +69,12 @@ class WebServer:
         self._on_start_streaming = on_start_streaming
         self._on_stop_streaming = on_stop_streaming
         self._get_streaming = get_streaming
+        self._get_audio_output_mode = get_audio_output_mode
         self._on_switch_port = on_switch_port
         self._get_port_status = get_port_status
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
+        self._audio_output_clients: Set[web.WebSocketResponse] = set()
         self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=10)
         self._event_log: Deque[Dict[str, Any]] = deque(maxlen=20)
         self._tracker_last_seen: float = 0.0
@@ -138,6 +147,44 @@ class WebServer:
             json.dumps({"type": "transcription", "text": text, "timestamp": time.time()}, ensure_ascii=False)
         ))
 
+    def build_audio_chunk_message(
+        self,
+        pcm_data: bytes,
+        sample_rate: int,
+        channels: int = 1,
+    ) -> Dict[str, Any]:
+        """Build a WebSocket message for Gemini output PCM audio."""
+        return {
+            "type": "output_audio",
+            "encoding": "pcm_s16le",
+            "sample_rate": sample_rate,
+            "channels": channels,
+            "data": base64.b64encode(pcm_data).decode("ascii"),
+            "timestamp": time.time(),
+        }
+
+    def push_audio_chunk(
+        self,
+        pcm_data: bytes,
+        sample_rate: int,
+        channels: int = 1,
+    ) -> None:
+        """Push output audio PCM to subscribed dashboard clients."""
+        if not self._audio_output_clients:
+            return
+        message = self.build_audio_chunk_message(pcm_data, sample_rate, channels)
+        self._fire_and_forget(self._broadcast_audio(json.dumps(message)))
+
+    def push_audio_control(self, action: str) -> None:
+        """Push an output audio control action to subscribed clients."""
+        if not self._audio_output_clients:
+            return
+        self._fire_and_forget(self._broadcast_audio(json.dumps({
+            "type": "output_audio_control",
+            "action": action,
+            "timestamp": time.time(),
+        })))
+
     def update_tracker_seen(self) -> None:
         """Mark that a tracker frame was received."""
         self._tracker_last_seen = time.time()
@@ -172,11 +219,20 @@ class WebServer:
         """Build system status dict (used by both broadcast and REST API)."""
         now = time.time()
         streaming = self._get_streaming() if self._get_streaming else False
+        audio_output_mode = (
+            self._get_audio_output_mode()
+            if self._get_audio_output_mode
+            else self._config.get("audio", {}).get(
+                "output_mode", DEFAULT_AUDIO_OUTPUT_MODE
+            )
+        )
         status = {
             "gemini_connected": self._gemini_client.is_connected(),
             "tracker_receiving": (now - self._tracker_last_seen) < _RECEIVER_TIMEOUT_SEC,
             "gc_receiving": (now - self._gc_last_seen) < _RECEIVER_TIMEOUT_SEC,
             "streaming": streaming,
+            "audio_output_mode": normalize_audio_output_mode(audio_output_mode),
+            "audio_output_subscribers": len(self._audio_output_clients),
         }
         if self._get_port_status:
             status["port_status"] = self._get_port_status()
@@ -241,6 +297,20 @@ class WebServer:
             except Exception:
                 dead.add(ws)
         self._ws_clients -= dead
+        self._audio_output_clients -= dead
+
+    async def _broadcast_audio(self, msg: str) -> None:
+        """Send a message to clients subscribed to output audio."""
+        if not self._audio_output_clients:
+            return
+        dead: Set[web.WebSocketResponse] = set()
+        for ws in list(self._audio_output_clients):
+            try:
+                await ws.send_str(msg)
+            except Exception:
+                dead.add(ws)
+        self._audio_output_clients -= dead
+        self._ws_clients -= dead
 
     # ========== HTTP Handlers ==========
 
@@ -271,7 +341,23 @@ class WebServer:
                     try:
                         data = json.loads(msg.data)
                         msg_type = data.get("type")
-                        if msg_type == "overlay_control":
+                        if msg_type == "audio_output_subscribe":
+                            enabled = bool(data.get("enabled"))
+                            if enabled:
+                                self._audio_output_clients.add(ws)
+                            else:
+                                self._audio_output_clients.discard(ws)
+                            await ws.send_str(json.dumps({
+                                "type": "audio_output_status",
+                                "subscribed": enabled,
+                                "timestamp": time.time(),
+                            }))
+                            logger.debug(
+                                "Output audio subscription %s, total: %d",
+                                "enabled" if enabled else "disabled",
+                                len(self._audio_output_clients),
+                            )
+                        elif msg_type == "overlay_control":
                             await self._broadcast(msg.data)
                         elif msg_type == "user_text":
                             text = data.get("text", "").strip()
@@ -309,6 +395,7 @@ class WebServer:
                     break
         finally:
             self._ws_clients.discard(ws)
+            self._audio_output_clients.discard(ws)
             logger.debug(f"WebSocket disconnected, total: {len(self._ws_clients)}")
 
         return ws
@@ -354,9 +441,21 @@ class WebServer:
 
         # Audio settings — require restart
         if "audio" in data:
-            self._config.setdefault("audio", {}).update(data["audio"])
-            if "device" in data.get("audio", {}):
+            audio_data = dict(data["audio"])
+            if "output_mode" in audio_data:
+                if not is_valid_audio_output_mode(audio_data["output_mode"]):
+                    return web.json_response(
+                        {"error": "Invalid audio.output_mode"},
+                        status=400,
+                    )
+                audio_data["output_mode"] = normalize_audio_output_mode(
+                    audio_data["output_mode"]
+                )
+            self._config.setdefault("audio", {}).update(audio_data)
+            if "device" in audio_data:
                 restart_required.append("audio.device")
+            if "output_mode" in audio_data:
+                restart_required.append("audio.output_mode")
 
         if self._on_config_update:
             self._on_config_update(self._config)
