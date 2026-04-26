@@ -7,7 +7,9 @@ let fieldRenderer = null;
 let wsClient = null;
 let lastState = null;
 const soundManager = new SoundManager();
+const audioOutputPlayer = new AudioOutputPlayer();
 let streamingActive = false;
+let clientAudioAvailable = false;
 let _lastSpeakingText = '';
 
 // ===== Init =====
@@ -21,6 +23,13 @@ document.addEventListener('DOMContentLoaded', () => {
   streamingBtn.addEventListener('click', async () => {
     streamingBtn.disabled = true;
     try {
+      if (!streamingActive && clientAudioAvailable && !audioOutputPlayer.isEnabled) {
+        try {
+          await setClientAudioEnabled(true);
+        } catch (e) {
+          console.error('Client audio enable error:', e);
+        }
+      }
       const endpoint = streamingActive ? '/api/streaming/stop' : '/api/streaming/start';
       await fetch(endpoint, { method: 'POST' });
     } catch (e) {
@@ -46,6 +55,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (enabled) soundManager.warmup();
   });
   soundBtn.classList.add('active');
+
+  const clientAudioBtn = document.getElementById('client-audio-btn');
+  clientAudioBtn.addEventListener('click', async () => {
+    try {
+      await setClientAudioEnabled(!audioOutputPlayer.isEnabled);
+    } catch (e) {
+      console.error('Client audio toggle error:', e);
+    }
+  });
 
   // User text input
   const textInput = document.getElementById('user-text-input');
@@ -126,7 +144,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Connect WebSocket
   wsClient = createWSClient({
-    onOpen:    () => setWSStatus('connected', '接続中'),
+    onOpen:    () => {
+      setWSStatus('connected', '接続中');
+      if (audioOutputPlayer.isEnabled) {
+        wsClient.send({ type: 'audio_output_subscribe', enabled: true });
+      }
+    },
     onClose:   () => setWSStatus('error', '切断'),
     onError:   () => setWSStatus('error', 'エラー'),
     onMessage: (evt) => {
@@ -156,6 +179,51 @@ function setWSStatus(cls, text) {
   document.getElementById('ws-label').textContent = text;
 }
 
+async function setClientAudioEnabled(enabled) {
+  if (enabled && !clientAudioAvailable) return;
+
+  if (enabled) {
+    await audioOutputPlayer.enable();
+  } else {
+    audioOutputPlayer.disable();
+  }
+
+  if (wsClient) {
+    wsClient.send({ type: 'audio_output_subscribe', enabled });
+  }
+  updateClientAudioUI();
+}
+
+function updateClientAudioAvailability(status) {
+  const mode = status.audio_output_mode || 'server';
+  const available = mode === 'client' || mode === 'both';
+  clientAudioAvailable = available;
+
+  const section = document.getElementById('client-audio-section');
+  if (section) section.classList.toggle('hidden', !available);
+
+  if (!available && audioOutputPlayer.isEnabled) {
+    audioOutputPlayer.disable();
+    if (wsClient) wsClient.send({ type: 'audio_output_subscribe', enabled: false });
+  }
+
+  updateClientAudioUI();
+}
+
+function updateClientAudioUI() {
+  const btn = document.getElementById('client-audio-btn');
+  const label = document.getElementById('client-audio-label');
+  const status = document.getElementById('client-audio-status');
+  if (!btn || !label || !status) return;
+
+  const enabled = audioOutputPlayer.isEnabled;
+  btn.classList.toggle('active', enabled);
+  btn.disabled = !clientAudioAvailable;
+  label.textContent = enabled ? 'ブラウザ音声ON' : 'ブラウザ音声';
+  status.textContent = enabled ? '有効' : '無効';
+  status.classList.toggle('active', enabled);
+}
+
 // ===== Message Handling =====
 function handleMessage(msg) {
   if (msg.type === 'state') {
@@ -168,6 +236,12 @@ function handleMessage(msg) {
     appendCommentary(msg);
   } else if (msg.type === 'transcription') {
     updateTranscription(msg.text);
+  } else if (msg.type === 'output_audio') {
+    audioOutputPlayer.enqueue(msg);
+  } else if (msg.type === 'output_audio_control') {
+    if (msg.action === 'clear') audioOutputPlayer.clear();
+  } else if (msg.type === 'audio_output_status') {
+    updateClientAudioUI();
   }
 }
 
@@ -255,6 +329,7 @@ function updateStatusIndicators(status) {
   setStatusDot('status-gemini', status.gemini_connected, 'Gemini API');
   setStatusDot('status-tracker', status.tracker_receiving, 'Vision Tracker');
   setStatusDot('status-gc', status.gc_receiving, 'Game Controller');
+  updateClientAudioAvailability(status);
   if (typeof updatePortStatusUI === 'function') {
     updatePortStatusUI(status.port_status);
   }

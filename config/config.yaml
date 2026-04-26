@@ -6,6 +6,7 @@ analysis_agent:
   timeout_seconds: 8
 audio:
   device: ''
+  output_mode: server
 commentary:
   analyst_silence_threshold: 5
   interrupt_priority_threshold: 2

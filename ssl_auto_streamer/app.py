@@ -25,6 +25,13 @@ from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
 from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent, ThinkingLevel
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
 from ssl_auto_streamer.audio import PcmAudioOutput
+from ssl_auto_streamer.audio_mode import (
+    DEFAULT_AUDIO_OUTPUT_MODE,
+    is_valid_audio_output_mode,
+    normalize_audio_output_mode,
+    uses_client_audio,
+    uses_server_audio,
+)
 from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
 from ssl_auto_streamer.ssl.tracker_client import TrackerClient
 from ssl_auto_streamer.ssl.gc_client import GCClient
@@ -50,6 +57,20 @@ class CommentaryApp:
         audio_cfg = config.get("audio", {})
         commentary_cfg = config.get("commentary", {})
         analysis_agent_cfg = config.get("analysis_agent", {})
+
+        raw_audio_output_mode = audio_cfg.get(
+            "output_mode", DEFAULT_AUDIO_OUTPUT_MODE
+        )
+        if not is_valid_audio_output_mode(raw_audio_output_mode):
+            logger.warning(
+                "Invalid audio.output_mode=%r; falling back to %s",
+                raw_audio_output_mode,
+                DEFAULT_AUDIO_OUTPUT_MODE,
+            )
+        self._audio_output_mode = normalize_audio_output_mode(
+            raw_audio_output_mode
+        )
+        self._config.setdefault("audio", {})["output_mode"] = self._audio_output_mode
 
         self._initial_context_sent: bool = False
 
@@ -114,10 +135,10 @@ class CommentaryApp:
         self._gemini_client.set_transcription_callback(self._on_transcription_received)
 
         # Audio output
-        sample_rate = gemini_cfg.get("sample_rate", 24000)
+        self._audio_sample_rate = gemini_cfg.get("sample_rate", 24000)
         audio_device = audio_cfg.get("device") or None
         self._audio_output = PcmAudioOutput(
-            sample_rate=sample_rate,
+            sample_rate=self._audio_sample_rate,
             device=audio_device,
         )
 
@@ -174,8 +195,16 @@ class CommentaryApp:
                 on_start_streaming=self._on_web_start_streaming,
                 on_stop_streaming=self._on_web_stop_streaming,
                 get_streaming=lambda: self._streaming,
+                get_audio_output_mode=lambda: self._audio_output_mode,
                 on_switch_port=self._on_switch_port,
                 get_port_status=self._get_port_status,
+            )
+
+        if uses_client_audio(self._audio_output_mode) and self._web_server is None:
+            logger.warning(
+                "audio.output_mode=%s requires the Web UI; no audio output "
+                "client is available because web.enabled is false",
+                self._audio_output_mode,
             )
 
         # Event cooldowns
@@ -280,6 +309,41 @@ class CommentaryApp:
         finally:
             await self.shutdown()
 
+    def _start_audio_output(self) -> None:
+        """Start server-side audio output when the selected mode uses it."""
+        if uses_server_audio(self._audio_output_mode):
+            self._audio_output.start()
+
+    def _stop_audio_output(self) -> None:
+        """Stop server audio and clear client-side queued audio."""
+        if uses_server_audio(self._audio_output_mode):
+            self._audio_output.stop()
+        if uses_client_audio(self._audio_output_mode) and self._web_server:
+            self._web_server.push_audio_control("clear")
+
+    def _clear_audio_output(self) -> None:
+        """Clear queued audio for all active output targets."""
+        if uses_server_audio(self._audio_output_mode):
+            self._audio_output.clear_buffer()
+        if uses_client_audio(self._audio_output_mode) and self._web_server:
+            self._web_server.push_audio_control("clear")
+
+    def _play_audio_output(self, pcm_data: bytes) -> None:
+        """Route Gemini output PCM to the selected output target(s)."""
+        if uses_server_audio(self._audio_output_mode):
+            self._audio_output.play(pcm_data)
+        if uses_client_audio(self._audio_output_mode) and self._web_server:
+            self._web_server.push_audio_chunk(
+                pcm_data,
+                sample_rate=self._audio_sample_rate,
+                channels=1,
+            )
+
+    def _flush_audio_output(self) -> None:
+        """Flush server-side tail audio when the selected mode uses it."""
+        if uses_server_audio(self._audio_output_mode):
+            self._audio_output.flush_buffer()
+
     async def start_streaming(self) -> bool:
         """Start commentary pipeline (connect Gemini, start audio)."""
         if self._streaming:
@@ -291,8 +355,11 @@ class CommentaryApp:
         if success:
             self._connected = True
             self._streaming = True
-            self._audio_output.start()
-            logger.info("Connected to Gemini API, audio started")
+            self._start_audio_output()
+            logger.info(
+                "Connected to Gemini API, audio output mode=%s",
+                self._audio_output_mode,
+            )
             await self._send_initial_context()
             blue_name, yellow_name = self._writer.get_team_names()
             startup_msg = json.dumps({
@@ -323,7 +390,7 @@ class CommentaryApp:
         if self._gemini_client.is_connected():
             await self._gemini_client.disconnect()
 
-        self._audio_output.stop()
+        self._stop_audio_output()
         self._initial_context_sent = False
         self._reconnect_attempts = 0
         logger.info("Streaming stopped")
@@ -341,7 +408,7 @@ class CommentaryApp:
         if self._connected:
             await self._gemini_client.disconnect()
 
-        self._audio_output.stop()
+        self._stop_audio_output()
         await self._analysis_agent.close()
 
         if self._web_server:
@@ -462,7 +529,7 @@ class CommentaryApp:
                 or prev_mode == CommentaryMode.ANALYST
             ):
                 logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
-                self._audio_output.clear_buffer()
+                self._clear_audio_output()
 
             json_payload = self._reader.to_gemini_json(request)
             logger.info(f"Sending reflex commentary for {event.event_type}")
@@ -537,8 +604,11 @@ class CommentaryApp:
                 self._connected = True
                 self._reconnect_attempts = 0
                 self._initial_context_sent = False
-                self._audio_output.start()
-                logger.info("Reconnected to Gemini API")
+                self._start_audio_output()
+                logger.info(
+                    "Reconnected to Gemini API, audio output mode=%s",
+                    self._audio_output_mode,
+                )
                 await self._send_initial_context()
             else:
                 self._next_reconnect_time = time.time() + backoff
@@ -551,7 +621,7 @@ class CommentaryApp:
 
     def _on_audio_received(self, pcm_data: bytes) -> None:
         """Handle received audio from Gemini (audio mode)."""
-        self._audio_output.play(pcm_data)
+        self._play_audio_output(pcm_data)
 
     def _on_transcription_received(self, text: str) -> None:
         """Handle output audio transcription from Gemini."""
@@ -560,7 +630,7 @@ class CommentaryApp:
 
     def _on_turn_complete(self) -> None:
         """Handle end of Gemini turn."""
-        self._audio_output.flush_buffer()
+        self._flush_audio_output()
 
     async def _send_initial_context(self) -> None:
         """Send SSL rules and team info as initial context."""

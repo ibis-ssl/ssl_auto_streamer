@@ -23,6 +23,7 @@ function populateForm(cfg) {
   setVal('cfg-update-rate', commentary.writer_update_rate || '');
 
   setVal('cfg-gemini-model', gemini.model || '');
+  setVal('cfg-audio-output-mode', audio.output_mode || 'server');
   setVal('cfg-audio-device', audio.device || '');
 }
 
@@ -46,6 +47,7 @@ async function applyConfig() {
       model: getVal('cfg-gemini-model'),
     },
     audio: {
+      output_mode: getVal('cfg-audio-output-mode') || 'server',
       device: getVal('cfg-audio-device'),
     },
   };
