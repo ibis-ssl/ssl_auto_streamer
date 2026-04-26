@@ -25,9 +25,20 @@ class SoundManager {
       case 'SHOT':
       case 'FAST_SHOT':       this._playShot(); break;
       case 'FOUL':            this._playFoul(); break;
+      case 'COLLISION':
+      case 'INVALID_GOAL':
+      case 'BALL_PLACEMENT_FAILED':
+      case 'PENALTY_KICK_FAILED':
+      case 'EMERGENCY_STOP':  this._playFoul(); break;
       case 'HALF_TIME':       this._playWhistle(1); break;
       case 'GAME_END':        this._playWhistle(3); break;
       case 'INPLAY_START':    this._playBeep(880, 0.1); break;
+      case 'KICKOFF':
+      case 'PENALTY':
+      case 'FREE_KICK':
+      case 'BALL_PLACEMENT':
+      case 'BALL_PLACEMENT_SUCCEEDED':
+      case 'PREPARED':        this._playBeep(720, 0.08); break;
       case 'SAVE':            this._playBeep(660, 0.08); break;
     }
   }

@@ -16,7 +16,21 @@ const TICKER_DURATIONS = {
   SAVE:         3000,
   HALT:         2000,
   STOP:         2000,
+  KICKOFF:      3000,
+  PENALTY:      4000,
+  FREE_KICK:    3000,
+  BALL_PLACEMENT: 4000,
+  BALL_PLACEMENT_SUCCEEDED: 3000,
+  BALL_PLACEMENT_FAILED: 4000,
   TIMEOUT:      4000,
+  COLLISION:    3000,
+  INVALID_GOAL: 5000,
+  PENALTY_KICK_FAILED: 4000,
+  NO_PROGRESS:  4000,
+  BOT_SUBSTITUTION: 4000,
+  CHALLENGE_FLAG: 4000,
+  EMERGENCY_STOP: 6000,
+  PREPARED:     2500,
 };
 
 const EVENT_LABELS = {
@@ -30,7 +44,21 @@ const EVENT_LABELS = {
   INPLAY_START: 'プレー再開',
   HALT:         '一時停止',
   STOP:         'ストップ',
+  KICKOFF:      'キックオフ',
+  PENALTY:      'ペナルティーキック',
+  FREE_KICK:    'フリーキック',
+  BALL_PLACEMENT: 'ボールプレイスメント',
+  BALL_PLACEMENT_SUCCEEDED: '配置成功',
+  BALL_PLACEMENT_FAILED: '配置失敗',
   TIMEOUT:      'タイムアウト',
+  COLLISION:    '接触',
+  INVALID_GOAL: 'ノーゴール',
+  PENALTY_KICK_FAILED: 'PK失敗',
+  NO_PROGRESS:  'ノープログレス',
+  BOT_SUBSTITUTION: 'ロボット交代',
+  CHALLENGE_FLAG: 'チャレンジ',
+  EMERGENCY_STOP: '緊急停止',
+  PREPARED:     '再開準備完了',
 };
 
 // CSS fade-out アニメーション時間 (overlay.css と合わせる)
@@ -38,6 +66,7 @@ const TICKER_FADEOUT_MS = 400;
 
 // ===== 状態 =====
 let wsClient = null;
+let fieldRenderer = null;
 const soundManager = new SoundManager();
 const audioOutputPlayer = new AudioOutputPlayer();
 
@@ -47,6 +76,7 @@ let _subtitleTimeout = null;
 
 // ゴール演出有効フラグ
 let _celebrationEnabled = true;
+let _fieldVisible = false;
 
 // OBS側の実況音声出力
 let _outputAudioEnabled = true;
@@ -55,6 +85,11 @@ let _outputAudioSubscribed = false;
 
 // ===== 初期化 =====
 document.addEventListener('DOMContentLoaded', () => {
+  const fieldCanvas = document.getElementById('overlay-field-canvas');
+  if (fieldCanvas) {
+    fieldRenderer = new FieldRenderer(fieldCanvas);
+  }
+
   wsClient = createWSClient({
     onOpen: () => {
       _outputAudioSubscribed = false;
@@ -106,6 +141,7 @@ function handleMessage(msg) {
 // ===== HUD更新 =====
 function updateHUD(state) {
   updateOutputAudioAvailability(state.status || {});
+  updateFieldOverlay(state);
 
   const gs = state.game_state || {};
   const teamInfo = state.team_info || {};
@@ -143,6 +179,16 @@ function updateHUD(state) {
   }
 
   // 字幕は transcription イベントで更新（HUD更新では変更しない）
+}
+
+function updateFieldOverlay(state) {
+  if (!fieldRenderer) return;
+
+  const snap = state.field_snapshot || {};
+  if (state.ball && state.ball.trajectory) {
+    snap.ball_trail = state.ball.trajectory.map(p => p.position);
+  }
+  fieldRenderer.draw(snap, state.game_state);
 }
 
 function updateOutputAudioAvailability(status) {
@@ -335,6 +381,9 @@ function applyControl(msg) {
     showTicker(msg.text || '', '', msg.duration || 5000);
   } else if (msg.action === 'show_stats') {
     document.getElementById('stats-panel').classList.toggle('hidden', msg.value === false);
+  } else if (msg.action === 'show_field') {
+    _fieldVisible = msg.value === true;
+    document.getElementById('field-overlay').classList.toggle('hidden', !_fieldVisible);
   } else if (msg.action === 'show_subtitles') {
     if (msg.value === false) {
       document.getElementById('subtitle-area').classList.add('hidden');

@@ -130,7 +130,7 @@ commentary:
 
 audio:
   device: ''               # 空文字でデフォルト出力デバイスを使用
-  output_mode: server      # server / client / both / off
+  output_mode: server      # server / client / both / off（Web UIから即時反映）
 ```
 
 その他の設定ファイル:
@@ -151,6 +151,7 @@ audio:
 - イベントログ
 - 実況パイプラインの手動開始/停止
 - `audio.output_mode: client` / `both` 時のブラウザ音声再生（OBSオーバーレイ側でも再生）
+- OBSオーバーレイへのフィールド表示切り替え
 - チームカラー・チーム名の変更
 
 **OBS配信オーバーレイ**: `http://localhost:8080/overlay.html` をOBSのブラウザソースに追加することで、スコアボード等を配信に重ねることができます。

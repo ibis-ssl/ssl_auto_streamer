@@ -41,6 +41,10 @@ document.addEventListener('DOMContentLoaded', () => {
     wsClient.send({ type: 'overlay_control', action: 'show_stats', value: e.target.checked });
   });
 
+  document.getElementById('toggle-field').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_field', value: e.target.checked });
+  });
+
   document.getElementById('toggle-subtitles').addEventListener('change', (e) => {
     wsClient.send({ type: 'overlay_control', action: 'show_subtitles', value: e.target.checked });
   });

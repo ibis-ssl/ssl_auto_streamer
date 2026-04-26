@@ -12,6 +12,36 @@ let streamingActive = false;
 let clientAudioAvailable = false;
 let _lastSpeakingText = '';
 
+const EVENT_LOG_LABELS = {
+  GOAL: 'ゴール',
+  SHOT: 'シュート',
+  FAST_SHOT: '高速シュート',
+  SAVE: 'セーブ',
+  FOUL: 'ファール',
+  COLLISION: '接触',
+  BALL_OUT: 'ボールアウト',
+  KICKOFF: 'キックオフ',
+  PENALTY: 'PK',
+  FREE_KICK: 'フリーキック',
+  BALL_PLACEMENT: 'ボールプレイスメント',
+  BALL_PLACEMENT_SUCCEEDED: '配置成功',
+  BALL_PLACEMENT_FAILED: '配置失敗',
+  INVALID_GOAL: 'ノーゴール',
+  PENALTY_KICK_FAILED: 'PK失敗',
+  NO_PROGRESS: 'ノープログレス',
+  BOT_SUBSTITUTION: 'ロボット交代',
+  CHALLENGE_FLAG: 'チャレンジ',
+  EMERGENCY_STOP: '緊急停止',
+  PREPARED: '再開準備完了',
+  HALF_TIME: 'ハーフタイム',
+  GAME_END: '試合終了',
+  INPLAY_START: 'プレー再開',
+  HALT: '一時停止',
+  STOP: 'ストップ',
+  TIMEOUT: 'タイムアウト',
+  GAME_EVENT: 'GCイベント',
+};
+
 // ===== Init =====
 document.addEventListener('DOMContentLoaded', () => {
   // Tab switching
@@ -134,6 +164,10 @@ document.addEventListener('DOMContentLoaded', () => {
     wsClient.send({ type: 'overlay_control', action: 'sound_enabled', value: e.target.checked });
   });
 
+  document.getElementById('toggle-field').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'show_field', value: e.target.checked });
+  });
+
   document.getElementById('send-ticker-btn').addEventListener('click', () => {
     const input = document.getElementById('ticker-text');
     const text = input.value.trim();
@@ -249,6 +283,7 @@ function updateDashboard(state) {
   window._lastTeamInfo = state.team_info || {};
   updateTeamNames(state.team_info);
   updateScoreboard(state.game_state, state.status);
+  updateGameStatePanel(state.game_state);
   updateStatusIndicators(state.status);
   updateStreamingControl(state.status);
   updateField(state);
@@ -323,6 +358,65 @@ function updateScoreboard(gs, status) {
   momentumEl.className = 'momentum-' + momentum.toLowerCase();
 }
 
+function updateGameStatePanel(gs) {
+  if (!gs) return;
+
+  const mins = gs.elapsed_minutes ?? 0;
+  const m = Math.floor(mins);
+  const s = Math.floor((mins - m) * 60);
+  const timeText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const momentum = gs.momentum || 'NEUTRAL';
+  const teamNames = window._lastTeamInfo || {};
+  const blueName = (teamNames.blue && teamNames.blue.name) || '青';
+  const yellowName = (teamNames.yellow && teamNames.yellow.name) || '黄';
+  const momentumText = momentum === 'BLUE' ? `${blueName}優勢` :
+    momentum === 'YELLOW' ? `${yellowName}優勢` : 'イーブン';
+
+  setText('state-command', gs.play_situation_detail || gs.play_situation || '-');
+  setText('state-time', timeText);
+  setText('state-momentum', momentumText);
+  setText('state-events-count', String((gs.recent_events || []).length));
+
+  const placement = gs.ball_placement || {};
+  const placementEl = document.getElementById('placement-state');
+  if (placementEl) placementEl.classList.toggle('active', !!placement.active);
+
+  if (!placement.active) {
+    setText('placement-summary', 'なし');
+    setText('placement-target', '-');
+    setText('placement-next-command', placement.next_command || '-');
+    setText('placement-time-left', formatSeconds(placement.time_remaining_sec));
+    return;
+  }
+
+  const team = placement.team;
+  const teamLabel = team === 'blue' ? blueName :
+    team === 'yellow' ? yellowName : team || '-';
+  setText('placement-summary', teamLabel);
+  setText('placement-target', formatPoint(placement.target_position));
+  setText('placement-next-command', placement.next_command || '-');
+  setText('placement-time-left', formatSeconds(placement.time_remaining_sec));
+}
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function formatPoint(point) {
+  if (!point) return '-';
+  const x = Number(point.x);
+  const y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return '-';
+  return `${x.toFixed(2)}, ${y.toFixed(2)} m`;
+}
+
+function formatSeconds(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '-';
+  return `${n.toFixed(1)} s`;
+}
+
 // ===== Status Indicators =====
 function updateStatusIndicators(status) {
   if (!status) return;
@@ -379,12 +473,33 @@ function renderEventLog(events) {
   renderLogList('event-log-list', events, ev => {
     const label = ev.event_type === 'USER_TEXT' ? '💬 テキスト入力'
                 : ev.event_type === 'USER_AUDIO' ? '🎤 音声入力'
-                : ev.event_type;
-    const text = ev.data && ev.data.text
-      ? `<span class="log-event-detail">${escapeHtml(ev.data.text)}</span>`
-      : '';
-    return `<span class="event-type ${ev.event_type}">${label}</span>${text}`;
+                : EVENT_LOG_LABELS[ev.event_type] || ev.event_type;
+    const detail = formatEventLogDetail(ev);
+    return `<span class="event-type ${ev.event_type}">${label}</span>${detail}`;
   });
+}
+
+function formatEventLogDetail(ev) {
+  const data = ev.data || {};
+  if (data.text) {
+    return `<span class="log-event-detail">${escapeHtml(data.text)}</span>`;
+  }
+
+  const meta = data.metadata || {};
+  const parts = [];
+  if (meta.gc_event_type) parts.push(`GC:${meta.gc_event_type}`);
+  if (meta.command) parts.push(`cmd:${meta.command}`);
+  if (meta.team_name || meta.by_team_name) {
+    parts.push(meta.team_name || meta.by_team_name);
+  } else if (meta.team || meta.by_team) {
+    parts.push(meta.team || meta.by_team);
+  }
+  if (meta.target_position) {
+    const p = meta.target_position;
+    parts.push(`target(${Number(p.x).toFixed(2)}, ${Number(p.y).toFixed(2)})`);
+  }
+  if (parts.length === 0) return '';
+  return `<span class="log-event-detail">${escapeHtml(parts.join(' / '))}</span>`;
 }
 
 function flashEventPanel() {
