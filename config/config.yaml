@@ -6,22 +6,19 @@ analysis_agent:
   timeout_seconds: 8
 audio:
   device: ''
-  output_mode: server
+  output_mode: client
 commentary:
   analyst_silence_threshold: 5
   interrupt_priority_threshold: 2
   mode: reflex_analyst
   writer_update_rate: 1
 gemini:
+  api_key: AIzaSyDEYfL8SdhNWcYoCUY_MAURp8ly9A6FMEA
   model: gemini-3.1-flash-live-preview
   output_transcription: true
   sample_rate: 24000
   thinking_level: medium
 ssl:
-  vision_addr: 224.5.23.1
-  vision_ports:
-  - 10006
-  - 10006
   gc_addr: 224.5.23.1
   gc_ports:
   - 10003
@@ -30,3 +27,7 @@ ssl:
   tracker_ports:
   - 11010
   - 11010
+  vision_addr: 224.5.23.1
+  vision_ports:
+  - 10006
+  - 10006

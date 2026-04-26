@@ -6,10 +6,13 @@
 
 """Hybrid Event Detector - combines GC GameEvents and Tracker heuristics."""
 
+import hashlib
 import math
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from google.protobuf.descriptor import FieldDescriptor
 
 
 @dataclass
@@ -25,11 +28,16 @@ class DetectedEvent:
     metadata: Dict = field(default_factory=dict)
 
 
-# GC GameEvent type → DetectedEvent type mapping
+# GC GameEvent type -> DetectedEvent type mapping.
+# Keep every oneof field from proto/ssl_gc_game_event.proto represented here so
+# valid GC events are never silently dropped.
 _GC_EVENT_MAP = {
     # Goals
     "GOAL": "GOAL",
     "POSSIBLE_GOAL": "SHOT",
+    "INVALID_GOAL": "INVALID_GOAL",
+    "INDIRECT_GOAL": "INVALID_GOAL",
+    "CHIPPED_GOAL": "INVALID_GOAL",
     # Ball out
     "BALL_LEFT_FIELD_TOUCH_LINE": "BALL_OUT",
     "BALL_LEFT_FIELD_GOAL_LINE": "BALL_OUT",
@@ -38,6 +46,8 @@ _GC_EVENT_MAP = {
     "BOT_CRASH_UNIQUE": "COLLISION",
     "BOT_CRASH_DRAWN": "COLLISION",
     "BOT_PUSHED_BOT": "COLLISION",
+    "BOT_CRASH_UNIQUE_SKIPPED": "COLLISION",
+    "BOT_PUSHED_BOT_SKIPPED": "COLLISION",
     # Fast shot
     "BOT_KICKED_BALL_TOO_FAST": "FAST_SHOT",
     # Fouls
@@ -45,12 +55,60 @@ _GC_EVENT_MAP = {
     "BOUNDARY_CROSSING": "FOUL",
     "BOT_DRIBBLED_BALL_TOO_FAR": "FOUL",
     "ATTACKER_TOUCHED_BALL_IN_DEFENSE_AREA": "FOUL",
+    "ATTACKER_TOUCHED_OPPONENT_IN_DEFENSE_AREA": "FOUL",
+    "ATTACKER_TOUCHED_OPPONENT_IN_DEFENSE_AREA_SKIPPED": "FOUL",
+    "ATTACKER_DOUBLE_TOUCHED_BALL": "FOUL",
     "ATTACKER_TOO_CLOSE_TO_DEFENSE_AREA": "FOUL",
+    "DEFENDER_IN_DEFENSE_AREA": "FOUL",
+    "DEFENDER_IN_DEFENSE_AREA_PARTIALLY": "FOUL",
     "BOT_TOO_FAST_IN_STOP": "FOUL",
     "DEFENDER_TOO_CLOSE_TO_KICK_POINT": "FOUL",
     "BOT_INTERFERED_PLACEMENT": "FOUL",
     "BOT_HELD_BALL_DELIBERATELY": "FOUL",
     "BOT_TIPPED_OVER": "FOUL",
+    "MULTIPLE_CARDS": "FOUL",
+    "MULTIPLE_FOULS": "FOUL",
+    "TOO_MANY_ROBOTS": "FOUL",
+    "UNSPORTING_BEHAVIOR_MINOR": "FOUL",
+    "UNSPORTING_BEHAVIOR_MAJOR": "FOUL",
+    "KICK_TIMEOUT": "FOUL",
+    # Ball placement lifecycle
+    "PLACEMENT_SUCCEEDED": "BALL_PLACEMENT_SUCCEEDED",
+    "PLACEMENT_FAILED": "BALL_PLACEMENT_FAILED",
+    "MULTIPLE_PLACEMENT_FAILURES": "BALL_PLACEMENT_FAILED",
+    # Other referee/game events
+    "PENALTY_KICK_FAILED": "PENALTY_KICK_FAILED",
+    "NO_PROGRESS_IN_GAME": "NO_PROGRESS",
+    "BOT_SUBSTITUTION": "BOT_SUBSTITUTION",
+    "CHALLENGE_FLAG": "CHALLENGE_FLAG",
+    "EMERGENCY_STOP": "EMERGENCY_STOP",
+    "PREPARED": "PREPARED",
+}
+
+_TEAM_BY_ENUM = {
+    1: "yellow",
+    2: "blue",
+}
+
+_REFEREE_COMMAND_NAMES = {
+    0: "HALT",
+    1: "STOP",
+    2: "NORMAL_START",
+    3: "FORCE_START",
+    4: "PREPARE_KICKOFF_YELLOW",
+    5: "PREPARE_KICKOFF_BLUE",
+    6: "PREPARE_PENALTY_YELLOW",
+    7: "PREPARE_PENALTY_BLUE",
+    8: "DIRECT_FREE_YELLOW",
+    9: "DIRECT_FREE_BLUE",
+    10: "INDIRECT_FREE_YELLOW",
+    11: "INDIRECT_FREE_BLUE",
+    12: "TIMEOUT_YELLOW",
+    13: "TIMEOUT_BLUE",
+    14: "GOAL_YELLOW",
+    15: "GOAL_BLUE",
+    16: "BALL_PLACEMENT_YELLOW",
+    17: "BALL_PLACEMENT_BLUE",
 }
 
 # Referee command → (event_type, team, extra_metadata) mapping.
@@ -68,6 +126,10 @@ _TEAM_COMMAND_MAP = {
     13: ("TIMEOUT",        "blue",   {}),
     16: ("BALL_PLACEMENT", "yellow", {}),
     17: ("BALL_PLACEMENT", "blue",   {}),
+}
+
+_INPLAY_START_PRE_COMMANDS = {
+    0, 1, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 16, 17,
 }
 
 # Thresholds for Tracker heuristics
@@ -88,6 +150,7 @@ class EventDetector:
         # GC state tracking
         self._seen_gc_event_ids: Set[str] = set()
         self._last_gc_command: Optional[int] = None
+        self._last_gc_command_counter: Optional[int] = None
         self._last_gc_stage: Optional[int] = None
 
         # Tracker heuristics state
@@ -102,9 +165,12 @@ class EventDetector:
         """Detect events from Referee protobuf message."""
         events: List[DetectedEvent] = []
 
+        if not referee.game_events:
+            self._seen_gc_event_ids.clear()
+
         # Process new game_events
-        for ge in referee.game_events:
-            event_id = self._gc_event_id(ge)
+        for index, ge in enumerate(referee.game_events):
+            event_id = self._gc_event_id(ge, index)
             if event_id in self._seen_gc_event_ids:
                 continue
             self._seen_gc_event_ids.add(event_id)
@@ -115,17 +181,26 @@ class EventDetector:
 
         # Detect command changes
         current_command = referee.command
-        if (
-            self._last_gc_command is not None
-            and current_command != self._last_gc_command
+        current_counter = getattr(referee, "command_counter", None)
+        if self._last_gc_command is None:
+            cmd_event = self._initial_command_to_event(current_command, referee)
+            if cmd_event:
+                events.append(cmd_event)
+        elif (
+            current_command != self._last_gc_command
+            or (
+                current_counter is not None
+                and current_counter != self._last_gc_command_counter
+            )
         ):
             cmd_event = self._command_change_to_event(
-                self._last_gc_command, current_command
+                self._last_gc_command, current_command, referee
             )
             if cmd_event:
                 events.append(cmd_event)
 
         self._last_gc_command = current_command
+        self._last_gc_command_counter = current_counter
 
         # Detect stage changes (half time, game end)
         current_stage = referee.stage
@@ -238,58 +313,198 @@ class EventDetector:
 
     # ========== Helpers ==========
 
-    def _gc_event_id(self, ge: Any) -> str:
+    def _gc_event_id(self, ge: Any, index: int) -> str:
         """Generate a unique ID for a GC game event to avoid duplicates."""
-        event_type = ge.WhichOneof("event") or "unknown"
-        return f"{event_type}_{ge.created_timestamp}"
+        event_type = (
+            ge.WhichOneof("event") or self._gc_event_type_name(ge) or "unknown"
+        )
+        payload = ge.SerializePartialToString(deterministic=True)
+        digest = hashlib.sha1(payload).hexdigest()[:16]
+        return f"{index}:{event_type}:{digest}"
 
     def _gc_game_event_to_detected(
         self, ge: Any, referee: Any
     ) -> Optional[DetectedEvent]:
         """Convert a GC GameEvent to a DetectedEvent."""
         event_field = ge.WhichOneof("event")
-        if not event_field:
+        event_type_str = (
+            event_field.upper() if event_field else self._gc_event_type_name(ge)
+        )
+        if not event_type_str:
             return None
-
-        event_type_str = event_field.upper()
-        detected_type = _GC_EVENT_MAP.get(event_type_str)
-        if not detected_type:
-            return None
+        detected_type = _GC_EVENT_MAP.get(event_type_str, "GAME_EVENT")
 
         # Extract position and metadata from event
-        event_data = getattr(ge, event_field, None)
+        event_data = getattr(ge, event_field, None) if event_field else None
         position = (0.0, 0.0)
         primary_robot = None
-        metadata = {"gc_event_type": event_type_str}
+        secondary_robot = None
+        metadata = {
+            "gc_event_type": event_type_str,
+            "gc_event_has_payload": bool(event_field),
+        }
+        if detected_type == "GAME_EVENT":
+            metadata["log_only"] = True
 
         if event_data:
-            if hasattr(event_data, "location"):
-                loc = event_data.location
-                position = (loc.x, loc.y)
-            if hasattr(event_data, "by_team"):
-                by_team_value = event_data.by_team
-                # Team: 0=UNKNOWN, 1=YELLOW, 2=BLUE
-                team = "blue" if by_team_value == 2 else "yellow"
-                metadata["by_team"] = team
-            if hasattr(event_data, "by_bot"):
-                robot_id = event_data.by_bot
-                team = metadata.get("by_team", "blue")
-                primary_robot = {"id": robot_id, "team": team}
-            if hasattr(event_data, "initial_ball_speed"):
-                metadata["ball_speed"] = event_data.initial_ball_speed
+            event_metadata, positions = self._extract_gc_event_metadata(event_data)
+            metadata.update(event_metadata)
+            position = self._select_event_position(positions)
+            primary_robot, secondary_robot = self._extract_event_robots(metadata)
 
-        ball_speed = metadata.get("ball_speed", 0.0)
+        ball_speed = float(metadata.get("initial_ball_speed", 0.0))
         return DetectedEvent(
             event_type=detected_type,
             position=position,
             ball_speed=ball_speed,
             confidence=1.0,  # GC events are ground truth
             primary_robot=primary_robot,
+            secondary_robot=secondary_robot,
             metadata=metadata,
         )
 
+    @staticmethod
+    def _gc_event_type_name(ge: Any) -> Optional[str]:
+        try:
+            if not ge.HasField("type"):
+                return None
+        except (AttributeError, ValueError):
+            return None
+
+        enum_type = ge.DESCRIPTOR.fields_by_name["type"].enum_type
+        try:
+            return enum_type.values_by_number[ge.type].name
+        except KeyError:
+            return None
+
+    def _extract_gc_event_metadata(
+        self, event_data: Any
+    ) -> Tuple[Dict[str, Any], Dict[str, Tuple[float, float]]]:
+        """Extract scalar fields and positions from a GC event payload."""
+        metadata: Dict[str, Any] = {}
+        positions: Dict[str, Tuple[float, float]] = {}
+
+        for field in event_data.DESCRIPTOR.fields:
+            name = field.name
+            value = getattr(event_data, name)
+
+            if getattr(field, "is_repeated", False):
+                if field.type == FieldDescriptor.TYPE_MESSAGE:
+                    metadata[f"{name}_count"] = len(value)
+                else:
+                    metadata[name] = list(value)
+                continue
+
+            if not self._has_proto_field(event_data, name):
+                continue
+
+            if field.type == FieldDescriptor.TYPE_MESSAGE:
+                if hasattr(value, "x") and hasattr(value, "y"):
+                    point = (float(value.x), float(value.y))
+                    positions[name] = point
+                    metadata[name] = {"x": point[0], "y": point[1]}
+                continue
+
+            if field.type == FieldDescriptor.TYPE_ENUM:
+                metadata[name] = self._enum_value_to_metadata(field, value)
+                continue
+
+            metadata[name] = value
+
+        return metadata, positions
+
+    @staticmethod
+    def _has_proto_field(message: Any, field_name: str) -> bool:
+        try:
+            return message.HasField(field_name)
+        except (AttributeError, ValueError):
+            return True
+
+    @staticmethod
+    def _enum_value_to_metadata(field: Any, value: int) -> str:
+        if field.enum_type.full_name == "robocup_ssl.Team":
+            return _TEAM_BY_ENUM.get(value, "unknown")
+        try:
+            return field.enum_type.values_by_number[value].name
+        except KeyError:
+            return str(value)
+
+    @staticmethod
+    def _select_event_position(
+        positions: Dict[str, Tuple[float, float]]
+    ) -> Tuple[float, float]:
+        for key in ("location", "ball_location", "end", "start", "kick_location"):
+            if key in positions:
+                return positions[key]
+        return (0.0, 0.0)
+
+    def _extract_event_robots(
+        self, metadata: Dict[str, Any]
+    ) -> Tuple[Optional[Dict], Optional[Dict]]:
+        team = self._metadata_team(metadata, "kicking_team")
+        if "kicking_bot" in metadata:
+            return {"id": metadata["kicking_bot"], "team": team}, None
+
+        team = self._metadata_team(metadata, "by_team")
+        if "by_bot" in metadata:
+            primary = {"id": metadata["by_bot"], "team": team}
+            secondary = None
+            if "victim" in metadata:
+                secondary = {
+                    "id": metadata["victim"],
+                    "team": self._opponent_team(team),
+                }
+            return primary, secondary
+
+        if "violator" in metadata:
+            primary = {"id": metadata["violator"], "team": team}
+            secondary = None
+            if "victim" in metadata:
+                secondary = {
+                    "id": metadata["victim"],
+                    "team": self._opponent_team(team),
+                }
+            return primary, secondary
+
+        if "bot_yellow" in metadata or "bot_blue" in metadata:
+            primary = None
+            secondary = None
+            if "bot_yellow" in metadata:
+                primary = {"id": metadata["bot_yellow"], "team": "yellow"}
+            if "bot_blue" in metadata:
+                secondary = {"id": metadata["bot_blue"], "team": "blue"}
+            return primary, secondary
+
+        return None, None
+
+    @staticmethod
+    def _metadata_team(metadata: Dict[str, Any], field_name: str) -> str:
+        value = metadata.get(field_name)
+        if value in ("blue", "yellow"):
+            return value
+        fallback = metadata.get("by_team")
+        if fallback in ("blue", "yellow"):
+            return fallback
+        return "unknown"
+
+    @staticmethod
+    def _opponent_team(team: str) -> str:
+        if team == "blue":
+            return "yellow"
+        if team == "yellow":
+            return "blue"
+        return "unknown"
+
+    def _initial_command_to_event(
+        self, current_cmd: int, referee: Any
+    ) -> Optional[DetectedEvent]:
+        """Emit important set-play commands already active at startup."""
+        if current_cmd in _TEAM_COMMAND_MAP:
+            return self._team_command_to_event(current_cmd, referee)
+        return None
+
     def _command_change_to_event(
-        self, old_cmd: int, new_cmd: int
+        self, old_cmd: int, new_cmd: int, referee: Any
     ) -> Optional[DetectedEvent]:
         """Detect play state changes from Referee command transitions."""
         if new_cmd == 0:
@@ -307,7 +522,7 @@ class EventDetector:
                 confidence=1.0,
             )
         # NORMAL_START/FORCE_START after any non-inplay state → INPLAY_START
-        if new_cmd in (2, 3) and old_cmd in (0, 1, 4, 5, 6, 7, 8, 9, 10, 11):
+        if new_cmd in (2, 3) and old_cmd in _INPLAY_START_PRE_COMMANDS:
             return DetectedEvent(
                 event_type="INPLAY_START",
                 position=self._last_ball_pos,
@@ -315,17 +530,56 @@ class EventDetector:
                 confidence=1.0,
             )
         # Team-based commands (kickoff, penalty, free kick, timeout, ball placement)
-        entry = _TEAM_COMMAND_MAP.get(new_cmd)
-        if entry:
-            event_type, team, extra = entry
-            return DetectedEvent(
-                event_type=event_type,
-                position=self._last_ball_pos,
-                ball_speed=0.0,
-                confidence=1.0,
-                metadata={"team": team, **extra},
-            )
-        return None
+        return self._team_command_to_event(new_cmd, referee)
+
+    def _team_command_to_event(
+        self, command: int, referee: Any
+    ) -> Optional[DetectedEvent]:
+        """Convert a team-scoped referee command into a detected event."""
+        entry = _TEAM_COMMAND_MAP.get(command)
+        if not entry:
+            return None
+
+        event_type, team, extra = entry
+        metadata = {
+            "team": team,
+            "command": _REFEREE_COMMAND_NAMES.get(command, f"COMMAND_{command}"),
+            **extra,
+        }
+        position = self._last_ball_pos
+
+        if event_type == "BALL_PLACEMENT":
+            target = self._get_designated_position(referee)
+            if target is not None:
+                position = target
+                metadata["target_position"] = {"x": target[0], "y": target[1]}
+
+        next_command = self._get_next_command_name(referee)
+        if next_command:
+            metadata["next_command"] = next_command
+
+        return DetectedEvent(
+            event_type=event_type,
+            position=position,
+            ball_speed=0.0,
+            confidence=1.0,
+            metadata=metadata,
+        )
+
+    @staticmethod
+    def _get_designated_position(referee: Any) -> Optional[Tuple[float, float]]:
+        if not EventDetector._has_proto_field(referee, "designated_position"):
+            return None
+        # Referee designated_position is in millimeters; use meters internally.
+        point = referee.designated_position
+        return (point.x / 1000.0, point.y / 1000.0)
+
+    @staticmethod
+    def _get_next_command_name(referee: Any) -> Optional[str]:
+        if not EventDetector._has_proto_field(referee, "next_command"):
+            return None
+        value = referee.next_command
+        return _REFEREE_COMMAND_NAMES.get(value, f"COMMAND_{value}")
 
     def _stage_change_to_event(
         self, old_stage: int, new_stage: int

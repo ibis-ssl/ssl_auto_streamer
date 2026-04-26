@@ -178,6 +178,7 @@ class CommentaryApp:
         self._session_refresh_threshold: float = 13 * 60
         self._running = False
         self._pending_tasks: set = set()
+        self._last_callback_error_log: Dict[str, float] = {}
 
         # Web server (optional)
         web_cfg = config.get("web", {})
@@ -224,10 +225,19 @@ class CommentaryApp:
             "GAME_END": 10.0,
             "FOUL": 5.0,
             "COLLISION": 4.0,
+            "INVALID_GOAL": 5.0,
             "KICKOFF": 5.0,
             "PENALTY": 5.0,
             "FREE_KICK": 3.0,
             "BALL_PLACEMENT": 5.0,
+            "BALL_PLACEMENT_SUCCEEDED": 3.0,
+            "BALL_PLACEMENT_FAILED": 5.0,
+            "PENALTY_KICK_FAILED": 5.0,
+            "NO_PROGRESS": 8.0,
+            "BOT_SUBSTITUTION": 5.0,
+            "CHALLENGE_FLAG": 5.0,
+            "EMERGENCY_STOP": 10.0,
+            "PREPARED": 3.0,
         }
 
     def _load_yaml(self, filename: str) -> Optional[Dict]:
@@ -344,6 +354,34 @@ class CommentaryApp:
         if uses_server_audio(self._audio_output_mode):
             self._audio_output.flush_buffer()
 
+    def _set_audio_output_mode(self, raw_mode: object) -> None:
+        """Apply audio output mode changes without restarting the app."""
+        if not is_valid_audio_output_mode(raw_mode):
+            logger.warning(
+                "Invalid audio.output_mode=%r; keeping %s",
+                raw_mode,
+                self._audio_output_mode,
+            )
+            return
+
+        new_mode = normalize_audio_output_mode(raw_mode)
+        old_mode = self._audio_output_mode
+        if new_mode == old_mode:
+            return
+
+        if self._streaming:
+            if uses_server_audio(old_mode) and not uses_server_audio(new_mode):
+                self._audio_output.stop()
+            elif not uses_server_audio(old_mode) and uses_server_audio(new_mode):
+                self._audio_output.start()
+
+        if self._web_server:
+            self._web_server.push_audio_control("clear")
+
+        self._audio_output_mode = new_mode
+        self._config.setdefault("audio", {})["output_mode"] = new_mode
+        logger.info("Audio output mode updated: %s -> %s", old_mode, new_mode)
+
     async def start_streaming(self) -> bool:
         """Start commentary pipeline (connect Gemini, start audio)."""
         if self._streaming:
@@ -416,6 +454,14 @@ class CommentaryApp:
 
         logger.info("Shutdown complete")
 
+    def _log_callback_error(self, source: str, message: str) -> None:
+        """Rate-limited warning logger for source callback exceptions (5 s cooldown)."""
+        now = time.time()
+        if now - self._last_callback_error_log.get(source, 0.0) < 5.0:
+            return
+        self._last_callback_error_log[source] = now
+        logger.warning(message, exc_info=True)
+
     def _on_tracker_frame(self, frame: Any) -> None:
         """Handle TrackedFrame from TrackerClient."""
         try:
@@ -425,8 +471,8 @@ class CommentaryApp:
             events = self._event_detector.update_from_tracker(frame)
             for event in events:
                 self._on_detected_event(event)
-        except Exception as e:
-            logger.debug(f"Tracker frame processing error: {e}")
+        except Exception:
+            self._log_callback_error("tracker", "Tracker frame processing error")
 
     def _on_switch_port(self, source: str, port: int) -> bool:
         """Switch the active port for a given SSL data source."""
@@ -450,21 +496,21 @@ class CommentaryApp:
         """Handle SSL_GeometryData from VisionClient."""
         try:
             self._writer.update_from_geometry(geometry)
-        except Exception as e:
-            logger.debug(f"Vision geometry processing error: {e}")
+        except Exception:
+            self._log_callback_error("vision", "Vision geometry processing error")
 
     def _on_referee_message(self, referee: Any) -> None:
         """Handle Referee message from GCClient."""
         try:
-            self._writer.update_from_referee(referee)
             if self._web_server:
                 self._web_server.update_gc_seen()
+            self._writer.update_from_referee(referee)
             self._check_team_names_from_referee(referee)
             events = self._event_detector.update_from_referee(referee)
             for event in events:
                 self._on_detected_event(event)
-        except Exception as e:
-            logger.debug(f"Referee message processing error: {e}")
+        except Exception:
+            self._log_callback_error("referee", "Referee message processing error")
 
     def _check_team_names_from_referee(self, referee: Any) -> None:
         """Check if team names are available and send initial context / team update."""
@@ -489,13 +535,20 @@ class CommentaryApp:
         if event.secondary_robot:
             event_data["secondary_robot"] = event.secondary_robot
         if event.metadata:
-            # Convert team color key (by_team) to readable name if present
+            # Convert team color keys to readable names if present.
             metadata = dict(event.metadata)
-            if "by_team" in metadata:
+            for team_key_field, team_name_field in (
+                ("by_team", "by_team_name"),
+                ("team", "team_name"),
+            ):
+                if team_key_field not in metadata:
+                    continue
+                team_key = metadata[team_key_field]
+                if team_key not in ("blue", "yellow"):
+                    continue
                 blue_name, yellow_name = self._writer.get_team_names()
-                team_key = metadata["by_team"]
                 team_name = blue_name if team_key == "blue" else yellow_name
-                metadata["by_team_name"] = get_team_reading_from_data(
+                metadata[team_name_field] = get_team_reading_from_data(
                     team_name, self._team_profiles
                 )
             event_data["metadata"] = metadata
@@ -505,6 +558,9 @@ class CommentaryApp:
 
         if self._web_server:
             self._web_server.push_event(event.event_type, event_data)
+
+        if event_data.get("metadata", {}).get("log_only"):
+            return
 
         if not self._connected or not self._streaming:
             return
@@ -672,6 +728,7 @@ class CommentaryApp:
     def _on_web_config_update(self, config: Dict[str, Any]) -> None:
         """Apply runtime-reflectable config changes from Web UI."""
         commentary_cfg = config.get("commentary", {})
+        audio_cfg = config.get("audio", {})
 
         self._analyst_threshold = commentary_cfg.get(
             "analyst_silence_threshold", self._analyst_threshold
@@ -681,6 +738,9 @@ class CommentaryApp:
         )
         self._interrupt_priority_threshold = commentary_cfg.get(
             "interrupt_priority_threshold", self._interrupt_priority_threshold
+        )
+        self._set_audio_output_mode(
+            audio_cfg.get("output_mode", self._audio_output_mode)
         )
         logger.info("Config updated from Web UI")
 

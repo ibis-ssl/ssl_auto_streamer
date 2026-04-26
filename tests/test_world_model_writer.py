@@ -1,5 +1,6 @@
 from ssl_auto_streamer.ssl import ssl_vision_detection_tracked_pb2 as tracked_pb
 from ssl_auto_streamer.ssl import ssl_vision_geometry_pb2 as geometry_pb
+from ssl_auto_streamer.ssl import ssl_gc_referee_message_pb2 as referee_pb
 from ssl_auto_streamer.statler.world_model_writer import WorldModelWriter
 
 
@@ -72,4 +73,59 @@ def test_field_snapshot_includes_geometry_dimensions():
         "goal_depth": 0.18,
         "penalty_depth": 1.0,
         "penalty_width": 2.0,
+    }
+
+
+def _referee(command):
+    referee = referee_pb.Referee()
+    referee.packet_timestamp = 1
+    referee.stage = referee_pb.Referee.NORMAL_FIRST_HALF
+    referee.stage_time_left = 300_000_000
+    referee.command = command
+    referee.command_counter = 1
+    referee.command_timestamp = 1
+
+    for team, name in ((referee.yellow, "Yellow"), (referee.blue, "Blue")):
+        team.name = name
+        team.score = 0
+        team.red_cards = 0
+        team.yellow_cards = 0
+        team.timeouts = 4
+        team.timeout_time = 300_000_000
+        team.goalkeeper = 0
+
+    return referee
+
+
+def test_game_state_includes_ball_placement_state():
+    writer = WorldModelWriter()
+    referee = _referee(referee_pb.Referee.BALL_PLACEMENT_YELLOW)
+    referee.designated_position.x = 1234.0
+    referee.designated_position.y = -567.0
+    referee.next_command = referee_pb.Referee.INDIRECT_FREE_YELLOW
+    referee.current_action_time_remaining = 12_500_000
+    referee.yellow.can_place_ball = True
+    referee.yellow.ball_placement_failures = 1
+    referee.yellow.ball_placement_failures_reached = False
+    referee.blue.can_place_ball = False
+    referee.blue.ball_placement_failures = 3
+    referee.blue.ball_placement_failures_reached = True
+
+    writer.update_from_referee(referee)
+
+    state = writer.get_game_state_data()["ball_placement"]
+    assert state["active"] is True
+    assert state["team"] == "yellow"
+    assert state["target_position"] == {"x": 1.234, "y": -0.567}
+    assert state["next_command"] == "INDIRECT_FREE_YELLOW"
+    assert state["time_remaining_sec"] == 12.5
+    assert state["teams"]["yellow"] == {
+        "can_place_ball": True,
+        "failures": 1,
+        "failures_reached": False,
+    }
+    assert state["teams"]["blue"] == {
+        "can_place_ball": False,
+        "failures": 3,
+        "failures_reached": True,
     }

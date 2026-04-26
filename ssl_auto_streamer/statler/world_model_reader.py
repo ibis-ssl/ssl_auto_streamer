@@ -96,13 +96,83 @@ class WorldModelReader:
             },
             "BALL_PLACEMENT": {
                 "hint": "ボールプレイスメントです。",
-                "instruction": "ボールプレイスメントを行うチームを伝える。",
+                "instruction": "ボールプレイスメントを行うチームと、指定位置があれば座標を短く伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "BALL_PLACEMENT_SUCCEEDED": {
+                "hint": "ボールプレイスメント成功です。",
+                "instruction": "配置したチームと、所要時間・精度・移動距離があれば簡潔に伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "BALL_PLACEMENT_FAILED": {
+                "hint": "ボールプレイスメント失敗です。",
+                "instruction": "失敗したチームと、残り距離などの理由を短く伝える。",
                 "suggested_function": "get_game_state",
             },
             "FOUL": {
                 "hint": "ファールです。",
                 "instruction": "ファールの種類名と違反内容を具体的に説明する。数値がある場合は日本語で読み上げる。",
                 "suggested_function": "get_game_state",
+            },
+            "COLLISION": {
+                "hint": "接触です。",
+                "instruction": "接触したロボットと、速度や位置の情報があれば短く伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "INVALID_GOAL": {
+                "hint": "ゴールは認められません。",
+                "instruction": "無効ゴールになった理由や対象チームを、データに基づいて簡潔に伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "PENALTY_KICK_FAILED": {
+                "hint": "ペナルティーキック失敗です。",
+                "instruction": "失敗したチームとボール位置を短く伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "NO_PROGRESS": {
+                "hint": "試合進行が止まっています。",
+                "instruction": "ノープログレスの発生位置や経過時間があれば伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "BOT_SUBSTITUTION": {
+                "hint": "ロボット交代です。",
+                "instruction": "交代を行うチームを短く伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "CHALLENGE_FLAG": {
+                "hint": "チャレンジフラッグです。",
+                "instruction": "チャレンジを要求したチームを短く伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "EMERGENCY_STOP": {
+                "hint": "エマージェンシーストップです。",
+                "instruction": "緊急停止が発生したことと対象チームを明確に伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "PREPARED": {
+                "hint": "再開準備完了です。",
+                "instruction": "再開準備が整ったことを短く伝える。所要時間があれば補足する。",
+                "suggested_function": "get_game_state",
+            },
+            "TIMEOUT": {
+                "hint": "タイムアウトです。",
+                "instruction": "タイムアウトを取ったチームを短く伝える。",
+                "suggested_function": "get_game_state",
+            },
+            "HALT": {
+                "hint": "ハルトです。",
+                "instruction": "試合が一時停止したことを短く伝える。",
+                "suggested_function": None,
+            },
+            "STOP": {
+                "hint": "ストップです。",
+                "instruction": "試合がストップ状態になったことを短く伝える。",
+                "suggested_function": None,
+            },
+            "INPLAY_START": {
+                "hint": "プレー再開です。",
+                "instruction": "プレーが再開したことを短く伝える。",
+                "suggested_function": None,
             },
         }
 
@@ -119,7 +189,11 @@ class WorldModelReader:
         context = self._writer.get_context()
 
         priority = 1
-        if event_type in ["GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY"]:
+        if event_type in [
+            "GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY",
+            "FREE_KICK", "BALL_PLACEMENT", "BALL_PLACEMENT_FAILED",
+            "INVALID_GOAL", "PENALTY_KICK_FAILED", "EMERGENCY_STOP",
+        ]:
             priority = 2
         elif event_type in ["BALL_OUT"]:
             priority = 0
