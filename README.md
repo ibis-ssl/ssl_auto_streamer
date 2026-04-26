@@ -150,7 +150,7 @@ audio:
 - フィールドのリアルタイム可視化（ボール・ロボット位置）
 - イベントログ
 - 実況パイプラインの手動開始/停止
-- `audio.output_mode: client` / `both` 時のブラウザ音声再生
+- `audio.output_mode: client` / `both` 時のブラウザ音声再生（OBSオーバーレイ側でも再生）
 - チームカラー・チーム名の変更
 
 **OBS配信オーバーレイ**: `http://localhost:8080/overlay.html` をOBSのブラウザソースに追加することで、スコアボード等を配信に重ねることができます。
