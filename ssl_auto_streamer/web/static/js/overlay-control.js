@@ -26,6 +26,10 @@ document.addEventListener('DOMContentLoaded', () => {
     wsClient.send({ type: 'overlay_control', action: 'sound_enabled', value: e.target.checked });
   });
 
+  document.getElementById('toggle-output-audio').addEventListener('change', (e) => {
+    wsClient.send({ type: 'overlay_control', action: 'output_audio_enabled', value: e.target.checked });
+  });
+
   document.getElementById('send-ticker-btn').addEventListener('click', () => {
     const text = document.getElementById('ticker-text').value.trim();
     if (!text) return;

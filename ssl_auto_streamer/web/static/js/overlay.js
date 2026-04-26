@@ -39,6 +39,7 @@ const TICKER_FADEOUT_MS = 400;
 // ===== 状態 =====
 let wsClient = null;
 const soundManager = new SoundManager();
+const audioOutputPlayer = new AudioOutputPlayer();
 
 // 字幕管理
 let _lastSpeakingText = '';
@@ -47,9 +48,21 @@ let _subtitleTimeout = null;
 // ゴール演出有効フラグ
 let _celebrationEnabled = true;
 
+// OBS側の実況音声出力
+let _outputAudioEnabled = true;
+let _outputAudioAvailable = false;
+let _outputAudioSubscribed = false;
+
 // ===== 初期化 =====
 document.addEventListener('DOMContentLoaded', () => {
   wsClient = createWSClient({
+    onOpen: () => {
+      _outputAudioSubscribed = false;
+      updateOutputAudioSubscription();
+    },
+    onClose: () => {
+      _outputAudioSubscribed = false;
+    },
     onMessage: (evt) => {
       try {
         handleMessage(JSON.parse(evt.data));
@@ -61,7 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
   wsClient.connect();
 
   // OBSブラウザ内でAudioContextを初期化するためのトリガー
-  document.addEventListener('click', () => soundManager.warmup(), { once: true });
+  document.addEventListener('click', () => {
+    soundManager.warmup();
+    if (_outputAudioEnabled && _outputAudioAvailable) {
+      enableOverlayAudio();
+    }
+  }, { once: true });
 });
 
 // ===== メッセージ処理 =====
@@ -76,11 +94,19 @@ function handleMessage(msg) {
     updateSubtitle(msg.text);
   } else if (msg.type === 'overlay_control') {
     applyControl(msg);
+  } else if (msg.type === 'output_audio') {
+    audioOutputPlayer.enqueue(msg);
+  } else if (msg.type === 'output_audio_control') {
+    if (msg.action === 'clear') audioOutputPlayer.clear();
+  } else if (msg.type === 'audio_output_status') {
+    _outputAudioSubscribed = !!msg.subscribed;
   }
 }
 
 // ===== HUD更新 =====
 function updateHUD(state) {
+  updateOutputAudioAvailability(state.status || {});
+
   const gs = state.game_state || {};
   const teamInfo = state.team_info || {};
   const blue = teamInfo.blue || {};
@@ -117,6 +143,41 @@ function updateHUD(state) {
   }
 
   // 字幕は transcription イベントで更新（HUD更新では変更しない）
+}
+
+function updateOutputAudioAvailability(status) {
+  const mode = status.audio_output_mode || 'server';
+  const available = mode === 'client' || mode === 'both';
+  if (_outputAudioAvailable === available) {
+    updateOutputAudioSubscription();
+    return;
+  }
+
+  _outputAudioAvailable = available;
+  if (!available) {
+    audioOutputPlayer.disable();
+  }
+  updateOutputAudioSubscription();
+}
+
+function enableOverlayAudio() {
+  audioOutputPlayer.enable().catch((e) => {
+    console.warn('Output audio enable failed:', e);
+  });
+}
+
+function updateOutputAudioSubscription() {
+  const shouldSubscribe = _outputAudioEnabled && _outputAudioAvailable;
+
+  if (shouldSubscribe) {
+    enableOverlayAudio();
+  } else {
+    audioOutputPlayer.disable();
+  }
+
+  if (!wsClient || shouldSubscribe === _outputAudioSubscribed) return;
+  wsClient.send({ type: 'audio_output_subscribe', enabled: shouldSubscribe });
+  _outputAudioSubscribed = shouldSubscribe;
 }
 
 function setTeamSide(side, name, score) {
@@ -267,6 +328,9 @@ function applyControl(msg) {
     document.getElementById('hud').classList.toggle('hidden', msg.value === false);
   } else if (msg.action === 'sound_enabled') {
     msg.value ? soundManager.enable() : soundManager.disable();
+  } else if (msg.action === 'output_audio_enabled') {
+    _outputAudioEnabled = msg.value !== false;
+    updateOutputAudioSubscription();
   } else if (msg.action === 'manual_ticker') {
     showTicker(msg.text || '', '', msg.duration || 5000);
   } else if (msg.action === 'show_stats') {
