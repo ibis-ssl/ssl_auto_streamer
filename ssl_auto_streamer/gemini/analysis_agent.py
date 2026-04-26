@@ -69,6 +69,7 @@ class AnalysisAgent:
         config: Dict[str, Any],
         tool_declarations: Optional[List[Dict[str, Any]]] = None,
         tool_executor: Optional[Callable[[str, Dict[str, Any]], Dict[str, Any]]] = None,
+        tournament_context: Optional[Dict[str, Any]] = None,
     ):
         self._writer = writer
         self._enabled = config.get("enabled", True)
@@ -80,6 +81,7 @@ class AnalysisAgent:
         self._max_tool_iterations = config.get("max_tool_iterations", 3)
         self._tool_declarations = tool_declarations or []
         self._tool_executor = tool_executor
+        self._tournament_context = tournament_context or {}
         self._session: Optional[Any] = None  # aiohttp.ClientSession
 
     async def start(self) -> None:
@@ -153,10 +155,15 @@ class AnalysisAgent:
         collector = collectors.get(analysis_type)
         if collector:
             try:
-                return collector()
+                data = collector()
+                if self._tournament_context:
+                    data["tournament_context"] = self._tournament_context
+                return data
             except Exception as e:
                 logger.warning(f"Data collection error for {analysis_type}: {e}")
                 return {}
+        if self._tournament_context:
+            return {"tournament_context": self._tournament_context}
         return {}
 
     def _build_prompt(
@@ -166,8 +173,14 @@ class AnalysisAgent:
         template = _PROMPT_TEMPLATES.get(analysis_type, _PROMPT_TEMPLATES["momentum"])
         context_hint = f"着目点: {context}\n" if context else ""
         data_str = json.dumps(data, ensure_ascii=False, indent=2)
+        tournament_constraint = ""
+        if self._tournament_context:
+            tournament_constraint = (
+                "大会情報の扱い: tournament_context の掲載済み結果と日程だけを根拠にしてください。"
+                "順位、勝ち点、得失点差、決勝トーナメント進出確定は、明示データがない限り断定しないでください。\n\n"
+            )
 
-        return template.format(data=data_str, context_hint=context_hint)
+        return tournament_constraint + template.format(data=data_str, context_hint=context_hint)
 
     async def _call_rest_api(self, prompt: str) -> str:
         """Gemini REST API を Function Calling ループ付きで呼び出し、最終テキストを返す。"""

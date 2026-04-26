@@ -138,6 +138,7 @@ audio:
 |---|---|
 | `config/team_profiles.yaml` | チームプロファイルデータベース |
 | `config/ssl_rules.yaml` | SSLルール定義（ファール・セットプレー） |
+| `config/tournament_context.yaml` | 大会状況・既出結果・トーナメント日程 |
 | `config/system_instruction.md` | Geminiへのシステムプロンプト |
 | `config/function_declarations.json` | Gemini Function Calling定義 |
 

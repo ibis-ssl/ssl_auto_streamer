@@ -59,6 +59,7 @@ class CommentaryApp:
         # Load config files
         self._ssl_rules: Dict = self._load_yaml("ssl_rules.yaml") or {}
         self._team_profiles: Dict = self._load_yaml("team_profiles.yaml") or {}
+        self._tournament_context: Dict = self._load_yaml("tournament_context.yaml") or {}
 
         # Load system instruction
         system_instruction = self._load_text("system_instruction.md") or ""
@@ -86,6 +87,7 @@ class CommentaryApp:
             config={**analysis_agent_cfg, "api_key": api_key_for_analysis},
             tool_declarations=analysis_tool_declarations,
             tool_executor=self._function_handler.handle,
+            tournament_context=self._tournament_context,
         )
         self._function_handler.set_analysis_agent(self._analysis_agent)
 
@@ -571,6 +573,7 @@ class CommentaryApp:
             team_profiles=self._team_profiles,
             blue_team_name=blue_name if blue_name != DEFAULT_BLUE_TEAM_NAME else None,
             yellow_team_name=yellow_name if yellow_name != DEFAULT_YELLOW_TEAM_NAME else None,
+            tournament_context=self._tournament_context,
         )
         logger.info("Sending initial context to Gemini")
         await self._gemini_client.set_thinking_level(ThinkingLevel.MINIMAL)

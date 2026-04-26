@@ -1,0 +1,79 @@
+tournament:
+  name: "RoboCup Japan Open 2026"
+  competition: "RoboCup Small Size League Japan Open"
+  status_note: "未掲載の予選リーグ試合はこれから行われる予定。順位、勝ち点、得失点差、決勝トーナメント進出チームは厳密計算しない。"
+
+usage_guidelines:
+  - "実況・解説では掲載済み結果と日程だけを根拠にする。"
+  - "順位、勝ち点、得失点差、進出確定は明示データがない限り断定しない。"
+  - "未掲載カードは未実施として扱う。"
+  - "試合中はプレー描写を優先し、大会背景は停止中や解説モードで必要な時だけ触れる。"
+
+round_robin:
+  format: "総当たり戦"
+  status: "一部試合のみ掲載済み"
+  ranking_policy: "掲載済み結果から順位計算しない"
+  results:
+    - team_a: "ibis"
+      team_b: "ZUNOH Robotics"
+      score_a: 6
+      score_b: 0
+    - team_a: "ibis"
+      team_b: "Ri-one"
+      score_a: 3
+      score_b: 0
+    - team_a: "ibis"
+      team_b: "RoboDragons"
+      score_a: 1
+      score_b: 1
+    - team_a: "ZUNOH Robotics"
+      team_b: "GreenTea"
+      score_a: 2
+      score_b: 0
+    - team_a: "ZUNOH Robotics"
+      team_b: "TRAPS"
+      score_a: 1
+      score_b: 8
+    - team_a: "GreenTea"
+      team_b: "TRAPS"
+      score_a: 0
+      score_b: 10
+      note: "GreenTeaの不戦敗"
+    - team_a: "Ri-one"
+      team_b: "RoboDragons"
+      score_a: 0
+      score_b: 2
+
+final_tournament:
+  name: "Final Tournament"
+  qualification: "予選リーグの上位4チームが進出"
+  bracket:
+    - match_id: "FT-1"
+      ssl_id: "SSL-16"
+      name: "準決勝 1"
+      matchup: "リーグ1位 vs リーグ4位"
+    - match_id: "FT-2"
+      ssl_id: "SSL-17"
+      name: "準決勝 2"
+      matchup: "リーグ3位 vs リーグ2位"
+    - match_id: "3rd Place Game"
+      ssl_id: "SSL-19"
+      name: "3位決定戦"
+      matchup: "準決勝の敗者同士"
+    - match_id: "Final"
+      ssl_id: "SSL-20"
+      name: "決勝"
+      matchup: "準決勝の勝者同士"
+
+schedule:
+  - date: "2026-04-25"
+    items:
+      - "予選リーグ SSL-1 〜 SSL-8"
+  - date: "2026-04-26"
+    items:
+      - "予選リーグ SSL-9 〜 SSL-15"
+      - "準決勝 FT-1, FT-2"
+  - date: "2026-04-27"
+    items:
+      - "3位決定戦"
+      - "決勝"

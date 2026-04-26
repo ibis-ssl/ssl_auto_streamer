@@ -43,6 +43,7 @@ def generate_initial_context(
     team_profiles: Dict[str, Any],
     blue_team_name: Optional[str] = None,
     yellow_team_name: Optional[str] = None,
+    tournament_context: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generate initial context JSON for commentary session."""
     context = {
@@ -65,6 +66,9 @@ def generate_initial_context(
             "set_plays": ssl_rules["set_plays"],
         },
     }
+
+    if tournament_context:
+        context["tournament_context"] = tournament_context
 
     if blue_team_name:
         context["blue_team"] = {
