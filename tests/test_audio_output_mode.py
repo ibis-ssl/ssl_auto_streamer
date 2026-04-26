@@ -109,3 +109,28 @@ def test_web_server_status_prefers_runtime_audio_output_mode(tmp_path):
     status = server._build_status_dict()
 
     assert status["audio_output_mode"] == "server"
+
+
+def test_web_server_status_uses_gc_port_status_as_receiving_signal(tmp_path):
+    server = WebServer(
+        host="127.0.0.1",
+        port=0,
+        writer=object(),
+        gemini_client=_FakeGeminiClient(),
+        config={},
+        config_dir=tmp_path,
+        get_port_status=lambda: {
+            "gc": {
+                "active": 10003,
+                "ports": [
+                    {"port": 10003, "receiving": True},
+                    {"port": 11003, "receiving": False},
+                ],
+            }
+        },
+    )
+
+    status = server._build_status_dict()
+
+    assert status["gc_receiving"] is True
+    assert status["port_status"]["gc"]["ports"][0]["receiving"] is True

@@ -219,6 +219,11 @@ class WebServer:
         """Build system status dict (used by both broadcast and REST API)."""
         now = time.time()
         streaming = self._get_streaming() if self._get_streaming else False
+        port_status = (
+            self._safe_call(self._get_port_status)
+            if self._get_port_status
+            else None
+        )
         audio_output_mode = (
             self._get_audio_output_mode()
             if self._get_audio_output_mode
@@ -226,16 +231,24 @@ class WebServer:
                 "output_mode", DEFAULT_AUDIO_OUTPUT_MODE
             )
         )
+        tracker_receiving = (
+            (now - self._tracker_last_seen) < _RECEIVER_TIMEOUT_SEC
+            or self._source_receiving_from_port_status(port_status, "tracker")
+        )
+        gc_receiving = (
+            (now - self._gc_last_seen) < _RECEIVER_TIMEOUT_SEC
+            or self._source_receiving_from_port_status(port_status, "gc")
+        )
         status = {
             "gemini_connected": self._gemini_client.is_connected(),
-            "tracker_receiving": (now - self._tracker_last_seen) < _RECEIVER_TIMEOUT_SEC,
-            "gc_receiving": (now - self._gc_last_seen) < _RECEIVER_TIMEOUT_SEC,
+            "tracker_receiving": tracker_receiving,
+            "gc_receiving": gc_receiving,
             "streaming": streaming,
             "audio_output_mode": normalize_audio_output_mode(audio_output_mode),
             "audio_output_subscribers": len(self._audio_output_clients),
         }
-        if self._get_port_status:
-            status["port_status"] = self._get_port_status()
+        if port_status is not None:
+            status["port_status"] = port_status
         return status
 
     @staticmethod
@@ -245,6 +258,17 @@ class WebServer:
             return method()
         except Exception:
             return default if default is not None else {}
+
+    @staticmethod
+    def _source_receiving_from_port_status(
+        port_status: Optional[Dict[str, Any]], source: str
+    ) -> bool:
+        """Return whether any port for a source is currently receiving packets."""
+        if not port_status:
+            return False
+        source_status = port_status.get(source) or {}
+        ports = source_status.get("ports") or []
+        return any(bool(port.get("receiving")) for port in ports)
 
     def _build_state_message(self) -> Dict[str, Any]:
         """Build the full state snapshot for WebSocket broadcast."""
@@ -454,8 +478,6 @@ class WebServer:
             self._config.setdefault("audio", {}).update(audio_data)
             if "device" in audio_data:
                 restart_required.append("audio.device")
-            if "output_mode" in audio_data:
-                restart_required.append("audio.output_mode")
 
         if self._on_config_update:
             self._on_config_update(self._config)

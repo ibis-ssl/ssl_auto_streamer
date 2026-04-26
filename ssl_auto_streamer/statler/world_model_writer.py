@@ -6,6 +6,7 @@
 
 """World Model Writer - Maintains game narrative in background."""
 
+import copy
 import math
 import threading
 import time
@@ -130,6 +131,17 @@ class WorldModelWriter:
 
         self._current_ball_pos: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._current_ball_vel: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self._ball_placement_state: Dict[str, Any] = {
+            "active": False,
+            "team": None,
+            "target_position": None,
+            "next_command": None,
+            "time_remaining_sec": None,
+            "teams": {
+                "blue": {},
+                "yellow": {},
+            },
+        }
 
         self._match_start_time: Optional[float] = None
         self._stage_time_left_us: int = 0
@@ -308,6 +320,9 @@ class WorldModelWriter:
             self._play_situation_name = _REFEREE_COMMAND_NAMES.get(
                 command_value, f"COMMAND_{command_value}"
             )
+            self._ball_placement_state = self._build_ball_placement_state(
+                referee, command_value
+            )
 
             # Update elapsed time from stage_time_left
             self._stage_time_left_us = referee.stage_time_left
@@ -340,7 +355,13 @@ class WorldModelWriter:
                     self._highlights.pop()
 
             # Update match statistics
-            robot_team = data.get("primary_robot", {}).get("team", "blue")
+            metadata = data.get("metadata", {})
+            robot_team = (
+                data.get("primary_robot", {}).get("team")
+                or metadata.get("by_team")
+                or metadata.get("team")
+                or "blue"
+            )
             team_key = robot_team if robot_team in ("blue", "yellow") else "blue"
             stats = self._stats[team_key]
             if event_type in ("SHOT", "FAST_SHOT"):
@@ -442,6 +463,7 @@ class WorldModelWriter:
                 "elapsed_minutes": round(self._context.elapsed_seconds / 60.0, 1),
                 "play_situation": self._play_situation_name,
                 "play_situation_detail": self._get_play_situation_detail(),
+                "ball_placement": copy.deepcopy(self._ball_placement_state),
                 "momentum": self._context.momentum,
                 "recent_events": self._context.recent_events[-5:],
                 "highlights_count": len([h for h in self._highlights if h.score >= 70]),
@@ -655,9 +677,81 @@ class WorldModelWriter:
         cards["red_cards"] = team_proto.red_cards
         cards["foul_counter"] = team_proto.foul_counter
         cards["max_allowed_bots"] = team_proto.max_allowed_bots
-        new_times = [t.seconds for t in team_proto.yellow_card_times]
+        new_times = [int(t) for t in team_proto.yellow_card_times]
         if len(new_times) != len(cards["yellow_card_times"]):
             cards["yellow_card_times"] = new_times
+
+    def _build_ball_placement_state(
+        self, referee: Any, command_value: int
+    ) -> Dict[str, Any]:
+        """Build the current ball placement state from a Referee message."""
+        active_team = {
+            16: "yellow",
+            17: "blue",
+        }.get(command_value)
+
+        target_position = None
+        if self._has_proto_field(referee, "designated_position"):
+            target_position = {
+                "x": round(referee.designated_position.x / 1000.0, 3),
+                "y": round(referee.designated_position.y / 1000.0, 3),
+            }
+
+        next_command = None
+        if self._has_proto_field(referee, "next_command"):
+            next_value = referee.next_command
+            next_command = _REFEREE_COMMAND_NAMES.get(
+                next_value, f"COMMAND_{next_value}"
+            )
+
+        time_remaining_sec = None
+        if self._has_proto_field(referee, "current_action_time_remaining"):
+            time_remaining_sec = round(
+                referee.current_action_time_remaining / 1_000_000.0, 3
+            )
+
+        return {
+            "active": active_team is not None,
+            "team": active_team,
+            "target_position": target_position,
+            "next_command": next_command,
+            "time_remaining_sec": time_remaining_sec,
+            "teams": {
+                "blue": self._team_ball_placement_status(referee.blue),
+                "yellow": self._team_ball_placement_status(referee.yellow),
+            },
+        }
+
+    def _team_ball_placement_status(self, team_proto: Any) -> Dict[str, Any]:
+        return {
+            "can_place_ball": self._get_optional_proto_value(
+                team_proto, "can_place_ball"
+            ),
+            "failures": self._get_optional_proto_value(
+                team_proto, "ball_placement_failures", 0
+            ),
+            "failures_reached": self._get_optional_proto_value(
+                team_proto, "ball_placement_failures_reached", False
+            ),
+        }
+
+    @staticmethod
+    def _has_proto_field(message: Any, field_name: str) -> bool:
+        try:
+            return message.HasField(field_name)
+        except (AttributeError, ValueError):
+            return True
+
+    @staticmethod
+    def _get_optional_proto_value(
+        message: Any, field_name: str, default: Any = None
+    ) -> Any:
+        try:
+            if not message.HasField(field_name):
+                return default
+        except (AttributeError, ValueError):
+            pass
+        return getattr(message, field_name, default)
 
     def _build_team_stats_dict(self, team_key: str, possession_pct: float) -> Dict[str, Any]:
         """Build the stats sub-dict for get_match_stats_data()."""
@@ -719,6 +813,10 @@ class WorldModelWriter:
             "PREPARE_PENALTY_BLUE": "青チームPK準備",
             "DIRECT_FREE_YELLOW": "黄チームフリーキック",
             "DIRECT_FREE_BLUE": "青チームフリーキック",
+            "INDIRECT_FREE_YELLOW": "黄チームインダイレクトフリーキック",
+            "INDIRECT_FREE_BLUE": "青チームインダイレクトフリーキック",
+            "TIMEOUT_YELLOW": "黄チームタイムアウト",
+            "TIMEOUT_BLUE": "青チームタイムアウト",
             "BALL_PLACEMENT_YELLOW": "黄チームボールプレイスメント",
             "BALL_PLACEMENT_BLUE": "青チームボールプレイスメント",
         }
