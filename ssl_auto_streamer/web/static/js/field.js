@@ -17,6 +17,11 @@ const FIELD = {
   ballRadius: 0.043, // meters
 };
 
+function positiveNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 const TEAM_COLOR = {
   blue:   '#388bfd',
   yellow: '#e3b341',
@@ -27,6 +32,7 @@ class FieldRenderer {
     this._canvas = canvas;
     this._ctx = canvas.getContext('2d');
     this._padding = 24; // px
+    this._field = { ...FIELD };
     this._scale = 1;
     this._ox = 0; // canvas origin x (center of field)
     this._oy = 0; // canvas origin y (center of field)
@@ -35,18 +41,40 @@ class FieldRenderer {
     this._resizeObserver.observe(canvas);
   }
 
-  _resize() {
+  _resize(force = false) {
     const rect = this._canvas.parentElement.getBoundingClientRect();
-    const w = Math.round(rect.width);
-    const h = Math.round(rect.height);
-    if (w === this._canvas.width && h === this._canvas.height) return;
-    this._canvas.width = w;
-    this._canvas.height = h;
-    const scaleX = (w - this._padding * 2) / (FIELD.halfLength * 2);
-    const scaleY = (h - this._padding * 2) / (FIELD.halfWidth * 2);
+    const w = Math.max(1, Math.round(rect.width));
+    const h = Math.max(1, Math.round(rect.height));
+    const sizeChanged = w !== this._canvas.width || h !== this._canvas.height;
+    if (!sizeChanged && !force) return;
+    if (sizeChanged) {
+      this._canvas.width = w;
+      this._canvas.height = h;
+    }
+    const scaleX = Math.max(1, w - this._padding * 2) / (this._field.halfLength * 2);
+    const scaleY = Math.max(1, h - this._padding * 2) / (this._field.halfWidth * 2);
     this._scale = Math.min(scaleX, scaleY);
     this._ox = w / 2;
     this._oy = h / 2;
+  }
+
+  _setFieldGeometry(geometry) {
+    const length = positiveNumber(geometry?.length);
+    const width = positiveNumber(geometry?.width);
+    const next = {
+      ...FIELD,
+      halfLength: length ? length / 2 : FIELD.halfLength,
+      halfWidth: width ? width / 2 : FIELD.halfWidth,
+      goalWidth: positiveNumber(geometry?.goal_width) ?? FIELD.goalWidth,
+      goalDepth: positiveNumber(geometry?.goal_depth) ?? FIELD.goalDepth,
+      penaltyDepth: positiveNumber(geometry?.penalty_depth) ?? FIELD.penaltyDepth,
+      penaltyWidth: positiveNumber(geometry?.penalty_width) ?? FIELD.penaltyWidth,
+    };
+    const changed = Object.keys(next).some(key => next[key] !== this._field[key]);
+    if (changed) {
+      this._field = next;
+      this._resize(true);
+    }
   }
 
   /** Convert SSL coordinates (meters) to canvas pixels */
@@ -58,6 +86,9 @@ class FieldRenderer {
   _m(m) { return m * this._scale; }
 
   draw(fieldSnapshot, gameState) {
+    this._setFieldGeometry(fieldSnapshot?.field);
+    this._resize();
+
     const ctx = this._ctx;
     ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
 
@@ -75,9 +106,10 @@ class FieldRenderer {
   }
 
   _drawField(ctx) {
-    const [fx, fy] = this._px(-FIELD.halfLength, FIELD.halfWidth);
-    const fw = this._m(FIELD.halfLength * 2);
-    const fh = this._m(FIELD.halfWidth * 2);
+    const field = this._field;
+    const [fx, fy] = this._px(-field.halfLength, field.halfWidth);
+    const fw = this._m(field.halfLength * 2);
+    const fh = this._m(field.halfWidth * 2);
     ctx.fillStyle = '#1a4a1e';
     ctx.fillRect(fx, fy, fw, fh);
 
@@ -90,44 +122,45 @@ class FieldRenderer {
   }
 
   _drawLines(ctx) {
+    const field = this._field;
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
     ctx.lineWidth = Math.max(1, this._m(0.02));
 
     // Field boundary
-    this._rect(ctx, -FIELD.halfLength, -FIELD.halfWidth,
-      FIELD.halfLength * 2, FIELD.halfWidth * 2);
+    this._rect(ctx, -field.halfLength, -field.halfWidth,
+      field.halfLength * 2, field.halfWidth * 2);
 
     // Center line
-    const [cx0, cy0] = this._px(0, FIELD.halfWidth);
-    const [cx1, cy1] = this._px(0, -FIELD.halfWidth);
+    const [cx0, cy0] = this._px(0, field.halfWidth);
+    const [cx1, cy1] = this._px(0, -field.halfWidth);
     ctx.beginPath();
     ctx.moveTo(cx0, cy0);
     ctx.lineTo(cx1, cy1);
     ctx.stroke();
 
     // Center circle
-    this._circle(ctx, 0, 0, FIELD.centerRadius);
+    this._circle(ctx, 0, 0, field.centerRadius);
 
     // Penalty areas
-    const pd = FIELD.penaltyDepth;
-    const pw = FIELD.penaltyWidth;
-    this._rect(ctx, -FIELD.halfLength, -pw / 2, pd, pw);
-    this._rect(ctx, FIELD.halfLength - pd, -pw / 2, pd, pw);
+    const pd = field.penaltyDepth;
+    const pw = field.penaltyWidth;
+    this._rect(ctx, -field.halfLength, -pw / 2, pd, pw);
+    this._rect(ctx, field.halfLength - pd, -pw / 2, pd, pw);
 
     // Goals (filled)
     ctx.fillStyle = 'rgba(100,100,200,0.3)';
-    this._fillRect(ctx, -FIELD.halfLength - FIELD.goalDepth, -FIELD.goalWidth / 2,
-      FIELD.goalDepth, FIELD.goalWidth);
+    this._fillRect(ctx, -field.halfLength - field.goalDepth, -field.goalWidth / 2,
+      field.goalDepth, field.goalWidth);
     ctx.fillStyle = 'rgba(200,200,100,0.3)';
-    this._fillRect(ctx, FIELD.halfLength, -FIELD.goalWidth / 2,
-      FIELD.goalDepth, FIELD.goalWidth);
+    this._fillRect(ctx, field.halfLength, -field.goalWidth / 2,
+      field.goalDepth, field.goalWidth);
 
     // Goal lines
     ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-    this._rect(ctx, -FIELD.halfLength - FIELD.goalDepth, -FIELD.goalWidth / 2,
-      FIELD.goalDepth, FIELD.goalWidth);
-    this._rect(ctx, FIELD.halfLength, -FIELD.goalWidth / 2,
-      FIELD.goalDepth, FIELD.goalWidth);
+    this._rect(ctx, -field.halfLength - field.goalDepth, -field.goalWidth / 2,
+      field.goalDepth, field.goalWidth);
+    this._rect(ctx, field.halfLength, -field.goalWidth / 2,
+      field.goalDepth, field.goalWidth);
 
     // Center dot
     ctx.fillStyle = 'rgba(255,255,255,0.7)';
@@ -138,7 +171,7 @@ class FieldRenderer {
   }
 
   _drawRobots(ctx, blueRobots, yellowRobots) {
-    const r = Math.max(4, this._m(FIELD.robotRadius));
+    const r = Math.max(4, this._m(this._field.robotRadius));
     if (blueRobots) {
       for (const robot of blueRobots) {
         this._drawRobot(ctx, robot, TEAM_COLOR.blue, r);
@@ -198,7 +231,7 @@ class FieldRenderer {
   _drawBall(ctx, ball) {
     if (!ball) return;
     const [px, py] = this._px(ball.x, ball.y);
-    const r = Math.max(3, this._m(FIELD.ballRadius));
+    const r = Math.max(3, this._m(this._field.ballRadius));
 
     // Glow
     const grad = ctx.createRadialGradient(px, py, 0, px, py, r * 2.5);
