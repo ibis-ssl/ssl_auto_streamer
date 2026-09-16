@@ -11,7 +11,6 @@ const audioOutputPlayer = new AudioOutputPlayer();
 let streamingActive = false;
 let replayActive = false;
 let clientAudioAvailable = false;
-let _lastSpeakingText = '';
 
 const EVENT_LOG_LABELS = {
   GOAL: 'ゴール',
@@ -300,13 +299,18 @@ function handleMessage(msg) {
   } else if (msg.type === 'commentary') {
     appendCommentary(msg);
   } else if (msg.type === 'transcription') {
-    updateTranscription(msg.text);
+    subtitleStreamer.appendChunk(msg.text, msg.turn_id);
+  } else if (msg.type === 'turn_complete') {
+    subtitleStreamer.completeTurn(msg.turn_id);
   } else if (msg.type === 'thought') {
     updateThought(msg.text);
   } else if (msg.type === 'output_audio') {
     audioOutputPlayer.enqueue(msg);
   } else if (msg.type === 'output_audio_control') {
-    if (msg.action === 'clear') audioOutputPlayer.clear();
+    if (msg.action === 'clear') {
+      audioOutputPlayer.clear();
+      subtitleStreamer.clear();
+    }
   } else if (msg.type === 'audio_output_status') {
     updateClientAudioUI();
   }
@@ -650,29 +654,28 @@ function appendCommentary(msg) {
   renderCommentaryHistory((lastState?.commentary_history || []).concat([msg]));
 }
 
-let _transcriptionClearTimer = null;
-function updateTranscription(text) {
-  const el = document.getElementById('transcription-text');
-  if (el) el.textContent = text;
+const subtitleStreamer = new SubtitleStreamer({
+  charIntervalMs: 35,
+  hideDelayMs: 6500,
+  turnTimeoutMs: 3500,
+  onUpdate: (text, isTyping) => {
+    const bannerText = document.getElementById('speaking-banner-text');
+    if (bannerText) bannerText.textContent = text;
+    const el = document.getElementById('transcription-text');
+    if (el) el.textContent = text;
+  },
+  onShow: () => {
+    const banner = document.getElementById('speaking-banner');
+    if (banner) banner.classList.remove('hidden');
+  },
+  onHide: () => {
+    const banner = document.getElementById('speaking-banner');
+    if (banner) banner.classList.add('hidden');
+  },
+});
 
-  const banner = document.getElementById('speaking-banner');
-  const bannerText = document.getElementById('speaking-banner-text');
-  if (banner && bannerText && text !== _lastSpeakingText) {
-    _lastSpeakingText = text;
-    bannerText.textContent = text;
-    banner.classList.toggle('hidden', !text);
-  }
-
-  if (_transcriptionClearTimer) clearTimeout(_transcriptionClearTimer);
-  if (text) {
-    _transcriptionClearTimer = setTimeout(() => {
-      const el2 = document.getElementById('transcription-text');
-      if (el2) el2.textContent = '';
-      const banner2 = document.getElementById('speaking-banner');
-      if (banner2) banner2.classList.add('hidden');
-      _lastSpeakingText = '';
-    }, 8000);
-  }
+function updateTranscription(text, turnId) {
+  subtitleStreamer.appendChunk(text, turnId);
 }
 
 let _thoughtClearTimer = null;

@@ -1077,7 +1077,7 @@ class CommentaryApp:
         """Handle output audio transcription from Gemini."""
         self._ai_logger.log_transcription(self._current_turn_id, text)
         if self._web_server:
-            self._web_server.push_transcription(text)
+            self._web_server.push_transcription(text, turn_id=self._current_turn_id)
 
     def _on_thought_received(self, text: str) -> None:
         """Handle reasoning/thought stream from Gemini."""
@@ -1089,6 +1089,8 @@ class CommentaryApp:
         """Handle end of Gemini turn."""
         self._flush_audio_output()
         self._ai_logger.log_utterance_complete(self._current_turn_id)
+        if self._web_server:
+            self._web_server.push_turn_complete(self._current_turn_id)
 
     async def _send_initial_context(self) -> None:
         """Send SSL rules and team info as initial context."""

@@ -70,9 +70,6 @@ let fieldRenderer = null;
 const soundManager = new SoundManager();
 const audioOutputPlayer = new AudioOutputPlayer();
 
-// 字幕管理
-let _lastSpeakingText = '';
-let _subtitleTimeout = null;
 
 // ゴール演出有効フラグ
 let _celebrationEnabled = true;
@@ -126,13 +123,18 @@ function handleMessage(msg) {
   } else if (msg.type === 'commentary') {
     showTicker(msg.text, 'commentary', 7000);
   } else if (msg.type === 'transcription') {
-    updateSubtitle(msg.text);
+    subtitleStreamer.appendChunk(msg.text, msg.turn_id);
+  } else if (msg.type === 'turn_complete') {
+    subtitleStreamer.completeTurn(msg.turn_id);
   } else if (msg.type === 'overlay_control') {
     applyControl(msg);
   } else if (msg.type === 'output_audio') {
     audioOutputPlayer.enqueue(msg);
   } else if (msg.type === 'output_audio_control') {
-    if (msg.action === 'clear') audioOutputPlayer.clear();
+    if (msg.action === 'clear') {
+      audioOutputPlayer.clear();
+      subtitleStreamer.clear();
+    }
   } else if (msg.type === 'audio_output_status') {
     _outputAudioSubscribed = !!msg.subscribed;
   }
@@ -301,18 +303,26 @@ function updateStatsPanel(matchStats) {
 }
 
 // ===== 字幕 =====
-function updateSubtitle(text) {
-  if (text && text !== _lastSpeakingText) {
-    clearTimeout(_subtitleTimeout);
-    document.getElementById('subtitle-text').textContent = text;
-    document.getElementById('subtitle-area').classList.remove('hidden');
-    _lastSpeakingText = text;
-  } else if (!text && _lastSpeakingText) {
-    _subtitleTimeout = setTimeout(() => {
-      document.getElementById('subtitle-area').classList.add('hidden');
-      _lastSpeakingText = '';
-    }, 1500);
-  }
+const subtitleStreamer = new SubtitleStreamer({
+  charIntervalMs: 35,
+  hideDelayMs: 4500,
+  turnTimeoutMs: 3500,
+  onUpdate: (text, isTyping) => {
+    const el = document.getElementById('subtitle-text');
+    if (el) el.textContent = text;
+  },
+  onShow: () => {
+    const el = document.getElementById('subtitle-area');
+    if (el) el.classList.remove('hidden');
+  },
+  onHide: () => {
+    const el = document.getElementById('subtitle-area');
+    if (el) el.classList.add('hidden');
+  },
+});
+
+function updateSubtitle(text, turnId) {
+  subtitleStreamer.appendChunk(text, turnId);
 }
 
 // ===== イベント処理 =====

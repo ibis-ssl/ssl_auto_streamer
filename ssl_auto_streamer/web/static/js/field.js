@@ -36,17 +36,26 @@ class FieldRenderer {
     this._scale = 1;
     this._ox = 0; // canvas origin x (center of field)
     this._oy = 0; // canvas origin y (center of field)
+    this._lastSnapshot = null;
+    this._lastGameState = null;
     this._resize();
-    this._resizeObserver = new ResizeObserver(() => this._resize());
+    this._renderCurrent();
+    this._resizeObserver = new ResizeObserver(() => {
+      if (this._resize()) {
+        this._renderCurrent();
+      }
+    });
     this._resizeObserver.observe(canvas);
   }
 
   _resize(force = false) {
-    const rect = this._canvas.parentElement.getBoundingClientRect();
+    const parent = this._canvas.parentElement;
+    if (!parent) return false;
+    const rect = parent.getBoundingClientRect();
     const w = Math.max(1, Math.round(rect.width));
     const h = Math.max(1, Math.round(rect.height));
     const sizeChanged = w !== this._canvas.width || h !== this._canvas.height;
-    if (!sizeChanged && !force) return;
+    if (!sizeChanged && !force) return false;
     if (sizeChanged) {
       this._canvas.width = w;
       this._canvas.height = h;
@@ -56,6 +65,7 @@ class FieldRenderer {
     this._scale = Math.min(scaleX, scaleY);
     this._ox = w / 2;
     this._oy = h / 2;
+    return true;
   }
 
   _setFieldGeometry(geometry) {
@@ -85,24 +95,30 @@ class FieldRenderer {
   /** Convert meters to pixels */
   _m(m) { return m * this._scale; }
 
-  draw(fieldSnapshot, gameState) {
-    this._setFieldGeometry(fieldSnapshot?.field);
-    this._resize();
-
+  _renderCurrent() {
     const ctx = this._ctx;
     ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
 
     this._drawField(ctx);
     this._drawLines(ctx);
 
-    if (fieldSnapshot) {
+    const snap = this._lastSnapshot;
+    if (snap) {
       // Draw trajectory first (under robots/ball)
-      if (fieldSnapshot.ball_trail) {
-        this._drawBallTrail(ctx, fieldSnapshot.ball_trail);
+      if (snap.ball_trail) {
+        this._drawBallTrail(ctx, snap.ball_trail);
       }
-      this._drawRobots(ctx, fieldSnapshot.robots_blue, fieldSnapshot.robots_yellow);
-      this._drawBall(ctx, fieldSnapshot.ball);
+      this._drawRobots(ctx, snap.robots_blue, snap.robots_yellow);
+      this._drawBall(ctx, snap.ball);
     }
+  }
+
+  draw(fieldSnapshot, gameState) {
+    this._lastSnapshot = fieldSnapshot;
+    this._lastGameState = gameState;
+    this._setFieldGeometry(fieldSnapshot?.field);
+    this._resize();
+    this._renderCurrent();
   }
 
   _drawField(ctx) {

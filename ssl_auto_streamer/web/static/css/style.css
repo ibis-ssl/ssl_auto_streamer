@@ -200,6 +200,7 @@ main {
 
 /* ===== Dashboard ===== */
 #dashboard {
+  position: relative;
   flex-direction: column;
   height: 100%;
 }
@@ -456,30 +457,36 @@ main {
 
 .status-label { color: var(--md-sys-color-on-surface-variant); }
 
-/* ===== Speaking Banner ===== */
+/* ===== Speaking Banner (Floating Overlay) ===== */
 .speaking-banner {
+  position: absolute;
+  top: 74px;
+  left: 20px;
+  right: 20px;
+  z-index: 100;
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 20px;
-  background: var(--md-sys-color-surface-container-low);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
-  flex-shrink: 0;
+  padding: 12px 22px;
+  background: rgba(22, 28, 44, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--md-sys-shape-corner-medium, 12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
   overflow: hidden;
-  transition:
-    max-height var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
-    padding var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decel),
-    opacity var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
-  max-height: 120px;
+  pointer-events: none;
   opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--md-sys-motion-duration-medium2, 300ms) var(--md-sys-motion-easing-standard, ease),
+    transform var(--md-sys-motion-duration-medium2, 300ms) var(--md-sys-motion-easing-emphasized-decel, cubic-bezier(0.05, 0.7, 0.1, 1.0));
 }
 
 .speaking-banner.hidden {
-  max-height: 0;
-  padding-top: 0;
-  padding-bottom: 0;
   opacity: 0;
-  border-bottom-color: transparent;
+  transform: translateY(-8px);
+  pointer-events: none;
 }
 
 .speaking-banner-dot {

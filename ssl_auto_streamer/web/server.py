@@ -160,10 +160,22 @@ class WebServer:
             json.dumps({"type": "commentary", **entry}, ensure_ascii=False)
         ))
 
-    def push_transcription(self, text: str) -> None:
-        """Push output audio transcription to connected clients."""
+    def push_transcription(self, text: str, turn_id: Optional[str] = None) -> None:
+        """Push output audio transcription chunk to connected clients."""
+        payload = {"type": "transcription", "text": text, "timestamp": time.time()}
+        if turn_id:
+            payload["turn_id"] = turn_id
         self._fire_and_forget(self._broadcast(
-            json.dumps({"type": "transcription", "text": text, "timestamp": time.time()}, ensure_ascii=False)
+            json.dumps(payload, ensure_ascii=False)
+        ))
+
+    def push_turn_complete(self, turn_id: Optional[str] = None) -> None:
+        """Push turn completion notification to connected clients."""
+        payload = {"type": "turn_complete", "timestamp": time.time()}
+        if turn_id:
+            payload["turn_id"] = turn_id
+        self._fire_and_forget(self._broadcast(
+            json.dumps(payload, ensure_ascii=False)
         ))
 
     def push_thought(self, text: str) -> None:
