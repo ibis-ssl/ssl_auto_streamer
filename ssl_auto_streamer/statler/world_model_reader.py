@@ -56,82 +56,82 @@ class WorldModelReader:
             },
             "FAST_SHOT": {
                 "hint": "高速シュートです。",
-                "instruction": "シュート速度を秒速で読み上げ、シューターのIDを伝える。制限速度秒速6.5メートルとの比較も言及する。",
+                "instruction": "シュート速度とシューターIDを1〜2文で短く伝える。制限速度秒速6.5メートルとの比較も端的に言及する。",
                 "suggested_function": "get_highlight_details",
             },
             "SHOT": {
                 "hint": "シュートです。",
-                "instruction": "シューターのIDと位置、シュートの方向を短く伝える。",
+                "instruction": "シューターのIDと位置、シュートの方向を1〜2文で短く伝える。",
                 "suggested_function": None,
             },
             "SAVE": {
                 "hint": "セーブです。",
-                "instruction": "キーパーのIDを呼び、どの方向に飛んできたシュートを止めたか伝える。",
+                "instruction": "キーパーのIDを呼び、シュートを止めた様子を1〜2文で伝える。",
                 "suggested_function": "get_highlight_details",
             },
             "INTERCEPTION": {
                 "hint": "インターセプトです。",
-                "instruction": "インターセプトしたチームとロボットIDを短く伝える。",
+                "instruction": "インターセプトしたチームとロボットIDを1〜2文で短く伝える。",
                 "suggested_function": None,
             },
             "BALL_OUT": {
                 "hint": "ボールアウトです。",
-                "instruction": "どちらのチームが出したか、フィールドのどの辺から出たかを伝える。",
+                "instruction": "どちらのチームが出したか、フィールドのどの辺から出たかを1〜2文で伝える。",
                 "suggested_function": None,
             },
             "SET_PLAY": {
                 "hint": "セットプレーです。",
-                "instruction": "セットプレーの種類（フリーキック/キックオフ/PK等）とどちらのチームかを伝える。",
+                "instruction": "セットプレーの種類と対象チームを1〜2文で伝える。",
                 "suggested_function": "get_game_state",
             },
             "KICKOFF": {
                 "hint": "キックオフです。",
-                "instruction": "キックオフを行うチームを伝える。前半・後半の文脈があれば言及する。",
+                "instruction": "キックオフを行うチームを1〜2文で伝える。前半・後半の文脈があれば言及する。",
                 "suggested_function": "get_game_state",
             },
             "PENALTY": {
                 "hint": "ペナルティーキックです。",
-                "instruction": "PKを行うチームと相手チームを伝える。緊張感のある状況を短く表現する。",
+                "instruction": "PKを行うチームと相手チームを1〜2文で伝える。緊張感のある状況を短く表現する。",
                 "suggested_function": "get_game_state",
             },
             "FREE_KICK": {
                 "hint": "フリーキックです。",
-                "instruction": "フリーキックを行うチームを伝える。インダイレクトの場合は直接ゴールを狙えない点を補足する。",
+                "instruction": "フリーキックを行うチームを1〜2文で伝える。インダイレクトの場合は直接ゴールを狙えない点を端的に補足する。",
                 "suggested_function": "get_game_state",
             },
             "BALL_PLACEMENT": {
                 "hint": "ボールプレイスメントです。",
-                "instruction": "ボールプレイスメントを行うチームを伝える。指定位置がある場合は『センターサークル付近』『自陣・敵陣』などの大まかな位置を自然に伝え、数値の座標（XやY）は直接読み上げないこと。",
+                "instruction": "ボールプレイスメントを行うチームを1〜2文で伝える。指定位置がある場合は『センターサークル付近』『自陣・敵陣』などの大まかな位置を自然に伝え、数値の座標（XやY）は直接読み上げないこと。",
                 "suggested_function": "get_game_state",
             },
             "YELLOW_CARD": {
                 "hint": "イエローカードです。",
-                "instruction": "警告（イエローカード）が出されたチームを明確に伝える。一時退場や数的不利について短く触れる。",
+                "instruction": "警告（イエローカード）が出されたチームを1〜2文で明確に伝える。一時退場や数的不利について短く触れる。",
                 "suggested_function": "get_team_cards_and_fouls",
             },
             "RED_CARD": {
                 "hint": "レッドカードです。",
-                "instruction": "退場（レッドカード）が出されたチームを明確に伝える。今後の数的不利について短く触れる。",
+                "instruction": "退場（レッドカード）が出されたチームを1〜2文で明確に伝える。今後の数的不利について短く触れる。",
                 "suggested_function": "get_team_cards_and_fouls",
             },
             "BALL_PLACEMENT_SUCCEEDED": {
                 "hint": "ボールプレイスメント成功です。",
-                "instruction": "配置したチームと、所要時間・精度・移動距離があれば簡潔に伝える。",
+                "instruction": "配置したチームと、所要時間・精度があれば1〜2文で簡潔に伝える。",
                 "suggested_function": "get_game_state",
             },
             "BALL_PLACEMENT_FAILED": {
                 "hint": "ボールプレイスメント失敗です。",
-                "instruction": "失敗したチームと、残り距離などの理由を短く伝える。",
+                "instruction": "失敗したチームと、残り距離などの理由を1〜2文で短く伝える。",
                 "suggested_function": "get_game_state",
             },
             "FOUL": {
                 "hint": "ファールです。",
-                "instruction": "ファールの種類名と違反内容を具体的に説明する。数値がある場合は日本語で読み上げる。",
+                "instruction": "ファールの種類名と違反内容を1〜2文で具体的に説明する。数値がある場合は日本語で読み上げる。",
                 "suggested_function": "get_game_state",
             },
             "COLLISION": {
                 "hint": "接触です。",
-                "instruction": "接触したロボットと、速度や位置の情報があれば短く伝える。",
+                "instruction": "接触したロボットと状況を1〜2文で短く伝える。",
                 "suggested_function": "get_game_state",
             },
             "INVALID_GOAL": {
@@ -296,13 +296,13 @@ class WorldModelReader:
         }
 
     _ANALYSIS_INSTRUCTIONS: Dict[str, str] = {
-        "goal_replay": "直前のゴールを詳しく振り返る。シュート速度、距離、シューターのID、スコアの変動を具体的に伝える。",
-        "goal_under_review": "現在ゴールかどうかレフェリーの判定・確認（VAR）中です。シュートの勢いや状況に触れつつ、審判の最終判定を待っている状況を伝えてください。判定前に勝手に『外れた』『無得点』『ノーゴール』と断定することは絶対に禁止です。",
-        "shot_analysis": "直前のシュートを分析する。コース、速度、キーパーの反応を整理して伝える。",
-        "save_highlight": "直前のセーブを分析する。反応速度やポジショニングを具体的に伝える。",
-        "game_summary": "ここまでの試合を総括する。スコア、主要なハイライト、両チームの戦い方を分析する。",
-        "team_introduction": "両チームの特徴を紹介する。注目点を簡潔に伝える。",
-        "tactical_analysis": "現在の戦術的状況を分析する。数的優位、攻撃パターンを整理して伝える。",
+        "goal_replay": "直前のゴールを詳しく振り返る。シュート速度、距離、シューターのID、スコアの変動を2〜3文以内で具体的に伝える。",
+        "goal_under_review": "現在ゴールかどうかレフェリーの判定・確認（VAR）中です。シュートの状況に触れつつ、審判の最終判定を待っている状況を2〜3文以内で伝えてください。判定前に勝手に『外れた』『無得点』『ノーゴール』と断定することは絶対に禁止です。同じ文言を繰り返さず一度だけ伝えて発話を終えてください。",
+        "shot_analysis": "直前のシュートを分析する。コース、速度、キーパーの反応を2〜3文以内で整理して伝える。",
+        "save_highlight": "直前のセーブを分析する。反応速度やポジショニングを2〜3文以内で具体的に伝える。",
+        "game_summary": "ここまでの試合を総括する。スコア、主要なハイライト、両チームの戦い方を2〜3文以内で分析する。",
+        "team_introduction": "両チームの特徴を紹介する。注目点を2〜3文以内で簡潔に伝える。",
+        "tactical_analysis": "現在の戦術的状況を分析する。数的優位、攻撃パターンを2〜3文以内で整理して伝える。",
     }
 
     def _determine_analysis_type(self, context: GameContext, highlights: list) -> str:

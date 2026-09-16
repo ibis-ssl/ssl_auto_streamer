@@ -867,6 +867,11 @@ class CommentaryApp:
             logger.info(f"Skipping {event.event_type} (cooldown)")
             return
 
+        # ゴール審議中（VAR/判定確認中）の停止イベント（STOP/HALT）は審議の一部であるためリフレックス実況をスキップ
+        if self._writer.is_goal_under_review() and event.event_type in ("STOP", "HALT"):
+            logger.info(f"Skipping {event.event_type} (goal is currently under review)")
+            return
+
         # Generate reflex commentary
         prev_mode = self._reader.get_mode()
         self._reader.set_mode(CommentaryMode.REFLEX)
@@ -1116,6 +1121,7 @@ class CommentaryApp:
         await self._gemini_client.set_thinking_level(ThinkingLevel.MINIMAL)
         await self._gemini_client.send_text(payload)
         self._initial_context_sent = True
+        self._last_request_time = time.time()
 
     async def _send_reflex(self, payload: str, priority: int) -> None:
         level = ThinkingLevel.MINIMAL if priority == 0 else ThinkingLevel.LOW

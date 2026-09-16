@@ -1,4 +1,4 @@
-.PHONY: proto install run clean replay play-log test test-log generate-test-data
+.PHONY: proto install run clean replay play-log test test-log generate-test-data iterate
 
 SAMPLE_LOG ?= tests/data/sample_match.log.gz
 SPEED ?= 1.0
@@ -24,11 +24,14 @@ play-log:
 generate-test-data:
 	uv run ssl-log-generator --all
 
+iterate:
+	uv run python scripts/run_commentary_iteration.py $(SAMPLE_LOG)
+
 test:
-	PYTHONPATH="" uv run pytest
+	PYTHONPATH="" uv run pytest -p no:launch-testing-ros -p no:ament_lint
 
 test-log:
-	PYTHONPATH="" uv run pytest tests/test_log_replay.py -v
+	PYTHONPATH="" uv run pytest -p no:launch-testing-ros -p no:ament_lint tests/test_log_replay.py -v
 
 clean:
 	find . -name "*.pyc" -delete

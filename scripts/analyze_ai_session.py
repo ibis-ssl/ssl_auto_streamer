@@ -45,16 +45,24 @@ def split_sentences(text: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
-def inspect_turn_compliance(turn: Dict[str, Any]) -> List[str]:
+def inspect_turn_compliance(
+    turn: Dict[str, Any],
+    previous_turn: Optional[Dict[str, Any]] = None,
+    next_turn: Optional[Dict[str, Any]] = None,
+) -> List[str]:
     """Check commentary compliance issues for a single turn."""
     issues = []
     full_text = turn.get("transcription", "")
     event_type = turn.get("event_type", "")
     trigger = turn.get("trigger", "")
+    status = turn.get("status", "")
 
-    if not full_text and turn.get("status") != "cancelled":
+    if not full_text and status != "cancelled":
         # initial_contextやteam_updateは発話を伴わないシステム設定送信のためスキップ
         if trigger in ("initial_context", "team_update"):
+            return []
+        # 中断・キャンセルされたターン、または直後に優先イベントやteam_updateが来てキャンセルされた場合
+        if "interrupted" in status or (next_turn and (trigger == "analyst" or next_turn.get("trigger") == "team_update")):
             return []
         # Maybe no response or only tool calls
         if not turn.get("tool_calls"):
@@ -69,6 +77,15 @@ def inspect_turn_compliance(turn: Dict[str, Any]) -> List[str]:
         issues.append(f"文数過多（実況モードで{sentence_count}文。原則1〜2文）")
     elif sentence_count > 3:
         issues.append(f"文数過多（{sentence_count}文。最大2〜3文）")
+
+    # 直前発話との同一・重複チェック
+    if previous_turn:
+        prev_text = previous_turn.get("transcription", "").strip()
+        if prev_text and full_text.strip():
+            if prev_text == full_text.strip():
+                issues.append("直前ターンと完全同一の発話を重複検知")
+            elif len(prev_text) > 10 and prev_text in full_text:
+                issues.append("直前ターンの発話内容をそのまま再発話（重複）")
 
     # Rule 3: 自己言及禁止
     meta_phrases = ["実況に入り", "実況します", "実況を開始", "解説に入り", "解説します", "解説モード", "AIとして"]
@@ -218,8 +235,10 @@ def print_report(session_info: Dict[str, Any], verbose: bool = False) -> None:
     total_latency = 0
     latency_count = 0
     all_issues = []
+    prev_turn = None
 
-    for idx, (t_id, turn) in enumerate(turns.items(), 1):
+    turns_list = list(turns.items())
+    for idx, (t_id, turn) in enumerate(turns_list, 1):
         status = turn.get("status", "unknown")
         if status == "completed":
             completed_count += 1
@@ -231,9 +250,11 @@ def print_report(session_info: Dict[str, Any], verbose: bool = False) -> None:
             total_latency += ttfb
             latency_count += 1
 
-        issues = inspect_turn_compliance(turn)
+        next_turn = turns_list[idx][1] if idx < len(turns_list) else None
+        issues = inspect_turn_compliance(turn, previous_turn=prev_turn, next_turn=next_turn)
         if issues:
             all_issues.append((t_id, issues))
+        prev_turn = turn
 
         # Turn header
         trig = turn.get("trigger", "")
@@ -299,6 +320,17 @@ def print_report(session_info: Dict[str, Any], verbose: bool = False) -> None:
     else:
         print("\n全てのターンが主要な実況ルール・品質基準を満たしています。")
     print("=" * 80 + "\n")
+
+    return {
+        "file": session_info.get("file"),
+        "session_id": session_info.get("session_id"),
+        "total_turns": total_turns,
+        "completed_count": completed_count,
+        "interrupted_count": interrupted_count,
+        "average_ttfb_ms": avg_ttfb,
+        "issues_count": len(all_issues),
+        "issues": all_issues,
+    }
 
 
 def main() -> None:
