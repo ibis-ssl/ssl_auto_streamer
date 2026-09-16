@@ -1,6 +1,7 @@
 from ssl_auto_streamer.ssl import ssl_vision_detection_tracked_pb2 as tracked_pb
 from ssl_auto_streamer.ssl import ssl_vision_geometry_pb2 as geometry_pb
 from ssl_auto_streamer.ssl import ssl_gc_referee_message_pb2 as referee_pb
+from ssl_auto_streamer.statler.world_model_reader import WorldModelReader
 from ssl_auto_streamer.statler.world_model_writer import WorldModelWriter
 
 
@@ -129,3 +130,46 @@ def test_game_state_includes_ball_placement_state():
         "failures": 3,
         "failures_reached": True,
     }
+
+
+def test_possible_goal_lifecycle_and_review_state():
+    writer = WorldModelWriter()
+    assert writer.is_goal_under_review() is False
+
+    # Receive POSSIBLE_GOAL
+    writer.add_event(
+        "POSSIBLE_GOAL",
+        {"primary_robot": {"id": 1, "team": "blue"}, "metadata": {"by_team": "blue"}},
+    )
+
+    assert writer.is_goal_under_review() is True
+    game_state = writer.get_game_state_data()
+    assert "ゴール判定・確認中" in game_state["play_situation_detail"]
+
+    # Confirmed GOAL clears under_review
+    writer.add_event(
+        "GOAL",
+        {"primary_robot": {"id": 1, "team": "blue"}, "metadata": {"by_team": "blue"}},
+    )
+    assert writer.is_goal_under_review() is False
+    assert "ゴール判定・確認中" not in (writer.get_game_state_data().get("play_situation_detail") or "")
+
+
+def test_world_model_reader_handles_possible_goal_and_review():
+    writer = WorldModelWriter()
+    reader = WorldModelReader(writer)
+
+    # Reflex priority
+    pg_req = reader.generate_reflex("POSSIBLE_GOAL", {"by_team": "blue"})
+    assert pg_req.priority == 2
+    assert "ゴール判定中" in reader.to_gemini_json(pg_req)
+
+    # When under review, analyst generates goal_under_review
+    writer.add_event(
+        "POSSIBLE_GOAL",
+        {"primary_robot": {"id": 1, "team": "blue"}, "metadata": {"by_team": "blue"}},
+    )
+    analysis_req = reader.generate_analysis()
+    assert analysis_req is not None
+    assert analysis_req.event_data["analysis_type"] == "goal_under_review"
+    assert "VAR" in analysis_req.event_data["instruction"]

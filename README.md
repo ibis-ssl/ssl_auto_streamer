@@ -162,6 +162,44 @@ audio:
 
 **OBS配信オーバーレイ**: `http://localhost:8080/overlay.html` をOBSのブラウザソースに追加することで、スコアボード等を配信に重ねることができます。
 
+## テスト・ログリプレイ
+
+実際の試合ログ（SSL_LOG_FILE形式 / `.log` または `.log.gz`）を使用して動作確認やテストを実行できます。
+
+### 1. 直接リプレイ実行（推奨）
+
+UDP不要で、ログファイルから直接データを読み込んでWeb UIや実況パイプラインを動かせます。
+
+```bash
+# サンプル試合データ（tests/data/sample_match.log.gz）で等倍速再生
+make replay
+
+# または任意のログファイルを指定して実行
+uv run ssl-auto-streamer --replay-log /path/to/match.log.gz --replay-speed 1.0
+```
+
+### 2. UDP送信ツール (`ssl-log-player`)
+
+実運用さながらにUDPマルチキャストでログパケットを送信し、別プロセスで起動した `ssl-auto-streamer` で受信テストを行います。
+
+```bash
+# ターミナル1: アプリ起動
+make run
+
+# ターミナル2: ログパケット送信
+make play-log
+# または
+uv run ssl-log-player tests/data/sample_match.log.gz --speed 1.0
+```
+
+### 3. ログ切り出しツール (`ssl-log-cutter`)
+
+長時間の試合ログから、指定した秒数やパケット数で軽量なテスト用ログを切り出せます。
+
+```bash
+uv run ssl-log-cutter /path/to/full_match.log.gz cut_sample.log.gz --duration-sec 60.0
+```
+
 ## 開発
 
 ```bash
@@ -171,8 +209,11 @@ make proto
 # リンター
 uv run ruff check
 
-# テスト
-uv run pytest
+# テスト実行
+make test
+
+# ログリプレイテストのみ実行
+make test-log
 ```
 
 ## ライセンス

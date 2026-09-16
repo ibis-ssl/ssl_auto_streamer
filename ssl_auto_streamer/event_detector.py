@@ -34,7 +34,7 @@ class DetectedEvent:
 _GC_EVENT_MAP = {
     # Goals
     "GOAL": "GOAL",
-    "POSSIBLE_GOAL": "SHOT",
+    "POSSIBLE_GOAL": "POSSIBLE_GOAL",
     "INVALID_GOAL": "INVALID_GOAL",
     "INDIRECT_GOAL": "INVALID_GOAL",
     "CHIPPED_GOAL": "INVALID_GOAL",
@@ -384,12 +384,12 @@ class EventDetector:
         metadata: Dict[str, Any] = {}
         positions: Dict[str, Tuple[float, float]] = {}
 
-        for field in event_data.DESCRIPTOR.fields:
-            name = field.name
+        for fld in event_data.DESCRIPTOR.fields:
+            name = fld.name
             value = getattr(event_data, name)
 
-            if getattr(field, "is_repeated", False):
-                if field.type == FieldDescriptor.TYPE_MESSAGE:
+            if getattr(fld, "is_repeated", False):
+                if fld.type == FieldDescriptor.TYPE_MESSAGE:
                     metadata[f"{name}_count"] = len(value)
                 else:
                     metadata[name] = list(value)
@@ -398,15 +398,15 @@ class EventDetector:
             if not self._has_proto_field(event_data, name):
                 continue
 
-            if field.type == FieldDescriptor.TYPE_MESSAGE:
+            if fld.type == FieldDescriptor.TYPE_MESSAGE:
                 if hasattr(value, "x") and hasattr(value, "y"):
                     point = (float(value.x), float(value.y))
                     positions[name] = point
                     metadata[name] = {"x": point[0], "y": point[1]}
                 continue
 
-            if field.type == FieldDescriptor.TYPE_ENUM:
-                metadata[name] = self._enum_value_to_metadata(field, value)
+            if fld.type == FieldDescriptor.TYPE_ENUM:
+                metadata[name] = self._enum_value_to_metadata(fld, value)
                 continue
 
             metadata[name] = value

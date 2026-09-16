@@ -9,6 +9,7 @@ let lastState = null;
 const soundManager = new SoundManager();
 const audioOutputPlayer = new AudioOutputPlayer();
 let streamingActive = false;
+let replayActive = false;
 let clientAudioAvailable = false;
 let _lastSpeakingText = '';
 
@@ -68,6 +69,30 @@ document.addEventListener('DOMContentLoaded', () => {
       streamingBtn.disabled = false;
     }
   });
+
+  // Auto test / Replay control
+  const testReplayBtn = document.getElementById('test-replay-btn');
+  if (testReplayBtn) {
+    testReplayBtn.addEventListener('click', async () => {
+      testReplayBtn.disabled = true;
+      try {
+        const endpoint = replayActive ? '/api/replay/stop' : '/api/replay/start';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speed: 1.0, loop: false }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          console.warn('Replay toggle response:', data);
+        }
+      } catch (e) {
+        console.error('Test replay control error:', e);
+      } finally {
+        testReplayBtn.disabled = false;
+      }
+    });
+  }
 
   // Settings form
   document.getElementById('config-apply-btn').addEventListener('click', applyConfig);
@@ -288,6 +313,7 @@ function updateDashboard(state) {
   updateGameStatePanel(state.game_state);
   updateStatusIndicators(state.status);
   updateStreamingControl(state.status);
+  updateReplayControl(state.status);
   updateField(state);
   renderEventLog(state.event_log || []);
   renderCommentaryHistory(state.commentary_history || []);
@@ -330,6 +356,32 @@ function updateStreamingControl(status) {
   if (userInputPanel) {
     userInputPanel.style.opacity = active ? '' : '0.5';
     userInputPanel.style.pointerEvents = active ? '' : 'none';
+  }
+}
+
+function updateReplayControl(status) {
+  if (!status) return;
+  const replay = status.replay || {};
+  const active = !!replay.active;
+  const btn = document.getElementById('test-replay-btn');
+  const label = document.getElementById('test-replay-label');
+  const statusEl = document.getElementById('test-replay-status');
+  if (!btn || !label || !statusEl) return;
+
+  if (active === replayActive && label.textContent) return;
+  replayActive = active;
+
+  if (active) {
+    btn.classList.add('active');
+    label.textContent = '⏹ テスト停止';
+    const speed = replay.speed ? `${replay.speed}x` : '再生中';
+    statusEl.textContent = `再生中 (${speed})`;
+    statusEl.className = 'test-replay-status active';
+  } else {
+    btn.classList.remove('active');
+    label.textContent = '自動テスト再生';
+    statusEl.textContent = '停止中';
+    statusEl.className = 'test-replay-status';
   }
 }
 

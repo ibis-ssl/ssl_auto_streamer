@@ -269,6 +269,39 @@ main {
   font-weight: 600;
 }
 
+/* Auto-test / Replay section */
+.test-replay-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#test-replay-btn {
+  padding-left: 12px;
+  padding-right: 14px;
+}
+
+#test-replay-btn.active {
+  background: var(--md-sys-color-tertiary-container, #ffd8e4);
+  color: var(--md-sys-color-on-tertiary-container, #31111d);
+  border-color: transparent;
+}
+
+#test-replay-btn .material-symbols-rounded {
+  font-size: 16px;
+}
+
+.test-replay-status {
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.test-replay-status.active {
+  color: var(--md-ext-green, #4caf50);
+  font-weight: 600;
+}
+
 .streaming-status-label {
   font-size: 13px;
   color: var(--md-sys-color-on-surface-variant);

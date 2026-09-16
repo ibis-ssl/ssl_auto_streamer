@@ -151,6 +151,8 @@ class WorldModelWriter:
         self._yellow_team_name: str = DEFAULT_YELLOW_TEAM_NAME
         self._blue_team_on_positive_half: Optional[bool] = None
         self._team_names_changed: bool = False
+        self._is_goal_under_review: bool = False
+        self._goal_review_team: Optional[str] = None
 
         # Card and foul tracking keyed by team color
         _zero_cards: Dict[str, Any] = {
@@ -375,6 +377,13 @@ class WorldModelWriter:
             elif event_type == "FOUL":
                 stats["fouls"] += 1
 
+            if event_type == "POSSIBLE_GOAL":
+                self._is_goal_under_review = True
+                self._goal_review_team = team_key
+            elif event_type in ("GOAL", "INVALID_GOAL", "INPLAY_START"):
+                self._is_goal_under_review = False
+                self._goal_review_team = None
+
             # Store to detailed event history
             self._event_history.append({
                 "type": event_type,
@@ -424,6 +433,7 @@ class WorldModelWriter:
     ) -> float:
         scores = {
             "GOAL": 100,
+            "POSSIBLE_GOAL": 95,
             "FAST_SHOT": 80,
             "SAVE": 75,
             "SHOT": 60,
@@ -449,6 +459,11 @@ class WorldModelWriter:
 
     # ========== Function Calling Data Providers ==========
 
+    def is_goal_under_review(self) -> bool:
+        """Return True if a goal is currently being reviewed / verified."""
+        with self._lock:
+            return self._is_goal_under_review
+
     def get_game_state_data(self) -> Dict[str, Any]:
         with self._lock:
             return {
@@ -463,6 +478,8 @@ class WorldModelWriter:
                 "elapsed_minutes": round(self._context.elapsed_seconds / 60.0, 1),
                 "play_situation": self._play_situation_name,
                 "play_situation_detail": self._get_play_situation_detail(),
+                "goal_under_review": self._is_goal_under_review,
+                "goal_review_team": self._goal_review_team,
                 "ball_placement": copy.deepcopy(self._ball_placement_state),
                 "momentum": self._context.momentum,
                 "recent_events": self._context.recent_events[-5:],
@@ -815,6 +832,10 @@ class WorldModelWriter:
         return getattr(robot, "visibility", 1.0) > 0.5
 
     def _get_play_situation_detail(self) -> str:
+        if self._is_goal_under_review:
+            team_name = self._yellow_team_name if self._goal_review_team == "yellow" else self._blue_team_name
+            return f"ゴール判定・確認中（{team_name}のシュート）"
+
         details = {
             "HALT": "試合停止中",
             "STOP": "ボール停止待ち",

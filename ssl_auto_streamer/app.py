@@ -167,6 +167,12 @@ class CommentaryApp:
         self._gc_client.set_callback(self._on_referee_message)
         self._vision_client.set_geometry_callback(self._on_vision_geometry)
 
+        # Replay settings
+        self._replay_log = ssl_cfg.get("replay_log")
+        self._replay_speed = float(ssl_cfg.get("replay_speed", 1.0))
+        self._replay_loop = bool(ssl_cfg.get("replay_loop", False))
+        self._replay_task: Optional[asyncio.Task] = None
+
         # Commentary settings
         self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
         self._writer_update_rate = commentary_cfg.get("writer_update_rate", 1.0)
@@ -204,6 +210,10 @@ class CommentaryApp:
                 get_audio_output_mode=lambda: self._audio_output_mode,
                 on_switch_port=self._on_switch_port,
                 get_port_status=self._get_port_status,
+                on_start_replay=self.start_replay,
+                on_stop_replay=self.stop_replay,
+                get_replay_status=self.get_replay_status,
+                on_run_pytest=self.run_pytest_suite,
             )
 
         if uses_client_audio(self._audio_output_mode) and self._web_server is None:
@@ -218,6 +228,7 @@ class CommentaryApp:
         self._event_cooldowns = {
             "SHOT": 2.0,
             "FAST_SHOT": 2.0,
+            "POSSIBLE_GOAL": 5.0,
             "GOAL": 5.0,
             "BALL_OUT": 3.0,
             "SET_PLAY": 5.0,
@@ -290,32 +301,39 @@ class CommentaryApp:
             except Exception as e:
                 logger.error(f"Failed to start web server: {e}")
 
-        # Start SSL data receivers
-        try:
-            await self._tracker_client.start(loop)
-            logger.info("Tracker client started")
-        except Exception as e:
-            logger.error(f"Failed to start tracker client: {e}")
-
-        try:
-            await self._gc_client.start(loop)
-            logger.info("GC client started")
-        except Exception as e:
-            logger.error(f"Failed to start GC client: {e}")
-
-        try:
-            await self._vision_client.start(loop)
-            logger.info("Vision client started")
-        except Exception as e:
-            logger.error(f"Failed to start vision client: {e}")
-
-        logger.info("Waiting for start command from dashboard...")
-
-        # Run main loop tasks (Gemini connection is initiated via dashboard)
         tasks = [
             asyncio.create_task(self._analyst_check_loop()),
             asyncio.create_task(self._reconnect_loop()),
         ]
+
+        if self._replay_log:
+            logger.info(
+                f"Replay mode enabled: reading from {self._replay_log} "
+                f"(speed={self._replay_speed}x, loop={self._replay_loop})"
+            )
+            self._replay_task = asyncio.create_task(self._run_replay_loop())
+            tasks.append(self._replay_task)
+        else:
+            # Start SSL data receivers (UDP)
+            try:
+                await self._tracker_client.start(loop)
+                logger.info("Tracker client started")
+            except Exception as e:
+                logger.error(f"Failed to start tracker client: {e}")
+
+            try:
+                await self._gc_client.start(loop)
+                logger.info("GC client started")
+            except Exception as e:
+                logger.error(f"Failed to start GC client: {e}")
+
+            try:
+                await self._vision_client.start(loop)
+                logger.info("Vision client started")
+            except Exception as e:
+                logger.error(f"Failed to start vision client: {e}")
+
+        logger.info("Waiting for start command from dashboard...")
 
         try:
             await asyncio.gather(*tasks)
@@ -438,11 +456,124 @@ class CommentaryApp:
         self._reconnect_attempts = 0
         logger.info("Streaming stopped")
 
+    async def _run_replay_loop(self) -> None:
+        """Replay packets from SSL log file and deliver directly to callbacks."""
+        from ssl_auto_streamer.ssl.log_reader import (
+            MSG_TYPE_SSL_REFBOX_2013,
+            MSG_TYPE_SSL_VISION_2014,
+            MSG_TYPE_SSL_VISION_TRACKER_2020,
+            SSLLogReader,
+        )
+
+        try:
+            with SSLLogReader(self._replay_log) as reader:
+                async for pkt in reader.iter_timed_packets(
+                    speed=self._replay_speed, loop=self._replay_loop
+                ):
+                    if not self._running:
+                        break
+
+                    if pkt.message_type == MSG_TYPE_SSL_VISION_TRACKER_2020:
+                        tracker = pkt.decode()
+                        if tracker and tracker.HasField("tracked_frame"):
+                            self._on_tracker_frame(tracker.tracked_frame)
+                    elif pkt.message_type == MSG_TYPE_SSL_REFBOX_2013:
+                        referee = pkt.decode()
+                        if referee:
+                            self._on_referee_message(referee)
+                    elif pkt.message_type == MSG_TYPE_SSL_VISION_2014:
+                        wrapper = pkt.decode()
+                        if wrapper and wrapper.HasField("geometry"):
+                            self._on_vision_geometry(wrapper.geometry)
+
+            logger.info("Log replay finished")
+        except asyncio.CancelledError:
+            logger.info("Log replay cancelled")
+        except Exception as e:
+            logger.error(f"Error during log replay: {e}", exc_info=True)
+
+    def start_replay(
+        self,
+        log_path: Optional[str] = None,
+        speed: float = 1.0,
+        loop: bool = False,
+    ) -> bool:
+        """Start log replay dynamically from UI or API (defaults to sample match log)."""
+        if self._replay_task and not self._replay_task.done():
+            logger.warning("Replay is already active")
+            return False
+
+        if not log_path:
+            default_sample = Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
+            log_path = str(default_sample)
+
+        path_obj = Path(log_path)
+        if not path_obj.exists():
+            logger.error(f"Replay log not found: {path_obj}")
+            return False
+
+        self._replay_log = str(path_obj)
+        self._replay_speed = speed
+        self._replay_loop = loop
+        try:
+            loop = asyncio.get_running_loop()
+            self._replay_task = loop.create_task(self._run_replay_loop())
+        except RuntimeError:
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            self._replay_task = loop.create_task(self._run_replay_loop())
+        logger.info(f"Started dynamic replay: {self._replay_log} (speed={speed}x)")
+        return True
+
+    def stop_replay(self) -> bool:
+        """Stop dynamic log replay."""
+        if self._replay_task and not self._replay_task.done():
+            self._replay_task.cancel()
+            self._replay_task = None
+            logger.info("Dynamic replay stopped")
+            return True
+        return False
+
+    def get_replay_status(self) -> Dict[str, Any]:
+        """Return current replay status."""
+        active = bool(self._replay_task and not self._replay_task.done())
+        return {
+            "active": active,
+            "log_path": self._replay_log if active else None,
+            "speed": self._replay_speed,
+            "loop": self._replay_loop,
+        }
+
+    async def run_pytest_suite(self) -> Dict[str, Any]:
+        """Run pytest test suite in background and return output summary."""
+        import subprocess
+
+        proc = await asyncio.create_subprocess_exec(
+            "uv", "run", "pytest",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env={**os.environ, "PYTHONPATH": ""},
+        )
+        stdout, stderr = await proc.communicate()
+        success = (proc.returncode == 0)
+        out_text = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
+        return {
+            "success": success,
+            "returncode": proc.returncode,
+            "output": out_text,
+        }
+
     async def shutdown(self) -> None:
         """Graceful shutdown."""
         self._running = False
         self._streaming = False
         logger.info("Shutting down...")
+
+        if self._replay_task and not self._replay_task.done():
+            self._replay_task.cancel()
 
         self._tracker_client.stop()
         self._gc_client.stop()

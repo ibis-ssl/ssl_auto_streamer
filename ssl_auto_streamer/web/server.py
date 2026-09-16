@@ -57,6 +57,10 @@ class WebServer:
         get_audio_output_mode: Optional[Callable[[], str]] = None,
         on_switch_port: Optional[Callable[[str, int], bool]] = None,
         get_port_status: Optional[Callable[[], Dict[str, Any]]] = None,
+        on_start_replay: Optional[Callable[..., bool]] = None,
+        on_stop_replay: Optional[Callable[[], bool]] = None,
+        get_replay_status: Optional[Callable[[], Dict[str, Any]]] = None,
+        on_run_pytest: Optional[Callable[[], Any]] = None,
     ):
         self._host = host
         self._port = port
@@ -72,6 +76,10 @@ class WebServer:
         self._get_audio_output_mode = get_audio_output_mode
         self._on_switch_port = on_switch_port
         self._get_port_status = get_port_status
+        self._on_start_replay = on_start_replay
+        self._on_stop_replay = on_stop_replay
+        self._get_replay_status = get_replay_status
+        self._on_run_pytest = on_run_pytest
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._audio_output_clients: Set[web.WebSocketResponse] = set()
@@ -102,6 +110,10 @@ class WebServer:
         self._app.router.add_post("/api/streaming/start", self._handle_streaming_start)
         self._app.router.add_post("/api/streaming/stop", self._handle_streaming_stop)
         self._app.router.add_post("/api/ssl/switch-port", self._handle_switch_port)
+        self._app.router.add_post("/api/replay/start", self._handle_replay_start)
+        self._app.router.add_post("/api/replay/stop", self._handle_replay_stop)
+        self._app.router.add_get("/api/replay/status", self._handle_replay_status)
+        self._app.router.add_post("/api/test/run", self._handle_test_run)
         if self._static_dir.exists():
             self._app.router.add_static("/static", self._static_dir)
 
@@ -256,6 +268,8 @@ class WebServer:
             "audio_output_mode": normalize_audio_output_mode(audio_output_mode),
             "audio_output_subscribers": len(self._audio_output_clients),
         }
+        if self._get_replay_status:
+            status["replay"] = self._safe_call(self._get_replay_status)
         if port_status is not None:
             status["port_status"] = port_status
         return status
@@ -555,3 +569,37 @@ class WebServer:
             logger.warning(f"Failed to load team_profiles.yaml: {e}")
             profiles = {}
         return web.json_response(profiles)
+
+    async def _handle_replay_start(self, request: web.Request) -> web.Response:
+        """Start match log replay dynamically."""
+        if not self._on_start_replay:
+            return web.json_response({"error": "Replay handler not configured"}, status=501)
+        try:
+            data = await request.json()
+        except Exception:
+            data = {}
+        log_path = data.get("log_path")
+        speed = float(data.get("speed", 1.0))
+        loop = bool(data.get("loop", False))
+        success = self._on_start_replay(log_path, speed, loop)
+        return web.json_response({"success": success})
+
+    async def _handle_replay_stop(self, request: web.Request) -> web.Response:
+        """Stop match log replay."""
+        if not self._on_stop_replay:
+            return web.json_response({"error": "Replay handler not configured"}, status=501)
+        success = self._on_stop_replay()
+        return web.json_response({"success": success})
+
+    async def _handle_replay_status(self, request: web.Request) -> web.Response:
+        """Get match log replay status."""
+        if not self._get_replay_status:
+            return web.json_response({"active": False})
+        return web.json_response(self._get_replay_status())
+
+    async def _handle_test_run(self, request: web.Request) -> web.Response:
+        """Run pytest test suite asynchronously."""
+        if not self._on_run_pytest:
+            return web.json_response({"error": "Test runner not configured"}, status=501)
+        res = await self._on_run_pytest()
+        return web.json_response(res)

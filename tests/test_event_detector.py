@@ -185,3 +185,20 @@ def test_defender_in_defense_area_maps_to_foul_with_robot_and_metadata():
     assert event.primary_robot == {"id": 4, "team": "blue"}
     assert event.metadata["gc_event_type"] == "DEFENDER_IN_DEFENSE_AREA"
     assert event.metadata["distance"] == pytest.approx(0.18)
+
+
+def test_possible_goal_gc_game_event_is_mapped_to_possible_goal():
+    detector = EventDetector()
+    referee = _referee()
+    pg = referee.game_events.add().possible_goal
+    pg.by_team = common_pb.BLUE
+    pg.kicking_bot = 7
+
+    events = detector.update_from_referee(referee)
+
+    assert len(events) == 1
+    event = events[0]
+    assert event.event_type == "POSSIBLE_GOAL"
+    assert event.metadata["by_team"] == "blue"
+    assert event.metadata["kicking_bot"] == 7
+

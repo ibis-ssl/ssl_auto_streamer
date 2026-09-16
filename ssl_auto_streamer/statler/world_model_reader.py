@@ -49,6 +49,11 @@ class WorldModelReader:
                 "instruction": "得点したチーム名とロボットID、更新後のスコアを簡潔に伝える。可能であればシュートの速度や距離も数値で補足する。",
                 "suggested_function": "get_highlight_details",
             },
+            "POSSIBLE_GOAL": {
+                "hint": "ゴール判定中（審議中）です。",
+                "instruction": "シュートがゴールに入った可能性がありますが、現在レフェリーによる判定・確認中です。最終判定が出る前に『外れた』『無得点』『ノーゴール』と断定してはいけません。『ゴールネットを揺らした模様ですが、現在判定中です』と伝えてください。",
+                "suggested_function": "get_game_state",
+            },
             "FAST_SHOT": {
                 "hint": "高速シュートです。",
                 "instruction": "シュート速度を秒速で読み上げ、シューターのIDを伝える。制限速度秒速6.5メートルとの比較も言及する。",
@@ -190,7 +195,7 @@ class WorldModelReader:
 
         priority = 1
         if event_type in [
-            "GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY",
+            "GOAL", "POSSIBLE_GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY",
             "FREE_KICK", "BALL_PLACEMENT", "BALL_PLACEMENT_FAILED",
             "INVALID_GOAL", "PENALTY_KICK_FAILED", "EMERGENCY_STOP",
         ]:
@@ -281,6 +286,7 @@ class WorldModelReader:
 
     _ANALYSIS_INSTRUCTIONS: Dict[str, str] = {
         "goal_replay": "直前のゴールを詳しく振り返る。シュート速度、距離、シューターのID、スコアの変動を具体的に伝える。",
+        "goal_under_review": "現在ゴールかどうかレフェリーの判定・確認（VAR）中です。シュートの勢いや状況に触れつつ、審判の最終判定を待っている状況を伝えてください。判定前に勝手に『外れた』『無得点』『ノーゴール』と断定することは絶対に禁止です。",
         "shot_analysis": "直前のシュートを分析する。コース、速度、キーパーの反応を整理して伝える。",
         "save_highlight": "直前のセーブを分析する。反応速度やポジショニングを具体的に伝える。",
         "game_summary": "ここまでの試合を総括する。スコア、主要なハイライト、両チームの戦い方を分析する。",
@@ -289,10 +295,15 @@ class WorldModelReader:
     }
 
     def _determine_analysis_type(self, context: GameContext, highlights: list) -> str:
+        if self._writer.is_goal_under_review():
+            return "goal_under_review"
+
         if highlights:
             top = max(highlights, key=lambda h: h.score)
             if top.event_type == "GOAL":
                 return "goal_replay"
+            elif top.event_type == "POSSIBLE_GOAL":
+                return "goal_under_review"
             elif top.event_type in ["FAST_SHOT", "SHOT"]:
                 return "shot_analysis"
             elif top.event_type == "SAVE":
@@ -308,6 +319,10 @@ class WorldModelReader:
             "goal_replay": [
                 {"function": "get_highlight_details", "args": {"highlight_type": "goal"}, "purpose": "ゴールの詳細データ取得"},
                 {"function": "get_robot_status", "purpose": "シューターの位置と状態確認"},
+            ],
+            "goal_under_review": [
+                {"function": "get_game_state", "purpose": "審判の判定状況・試合ステータス確認"},
+                {"function": "get_highlight_details", "args": {"highlight_type": "shot"}, "purpose": "直前のシュート状況確認"},
             ],
             "shot_analysis": [
                 {"function": "get_highlight_details", "args": {"highlight_type": "shot"}, "purpose": "シュートの速度とコース"},

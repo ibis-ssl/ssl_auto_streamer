@@ -74,6 +74,13 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
         else:
             config["web"]["port"] = args.web_port
 
+    if getattr(args, "replay_log", None):
+        config["ssl"]["replay_log"] = str(args.replay_log)
+    if getattr(args, "replay_speed", None) is not None:
+        config["ssl"]["replay_speed"] = args.replay_speed
+    if getattr(args, "replay_loop", False):
+        config["ssl"]["replay_loop"] = args.replay_loop
+
     audio_output_mode_arg = getattr(args, "audio_output_mode", None)
     if audio_output_mode_arg:
         config["audio"]["output_mode"] = audio_output_mode_arg
@@ -159,6 +166,22 @@ def main() -> None:
         type=int,
         default=None,
         help="Web UI port (default: 8080, 0 to disable)",
+    )
+    parser.add_argument(
+        "--replay-log",
+        default=None,
+        help="Path to SSL log file (.log or .log.gz) to replay instead of receiving live UDP",
+    )
+    parser.add_argument(
+        "--replay-speed",
+        type=float,
+        default=1.0,
+        help="Replay playback speed multiplier (default: 1.0, 0 for no delay)",
+    )
+    parser.add_argument(
+        "--replay-loop",
+        action="store_true",
+        help="Loop log replay indefinitely",
     )
     parser.add_argument(
         "--audio-output-mode",
