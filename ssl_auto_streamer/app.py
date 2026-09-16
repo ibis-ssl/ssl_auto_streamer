@@ -544,9 +544,24 @@ class CommentaryApp:
     def start_replay(
         self,
         log_path: Optional[str] = None,
+        *args,
         loop: bool = False,
+        **kwargs,
     ) -> bool:
-        """Start log replay dynamically from UI or API (defaults to sample match log)."""
+        """Start log replay dynamically from UI or API (defaults to sample match log).
+
+        Replay is fixed at real-time speed (1.0x). If legacy speed positional/keyword argument
+        is provided, it is safely ignored.
+        """
+        # Handle legacy positional arguments: (log_path, loop) or (log_path, speed, loop)
+        if args:
+            if len(args) == 1:
+                if isinstance(args[0], bool):
+                    loop = args[0]
+            elif len(args) >= 2:
+                if isinstance(args[1], bool):
+                    loop = args[1]
+
         if self._replay_task and not self._replay_task.done():
             logger.warning("Replay is already active")
             return False

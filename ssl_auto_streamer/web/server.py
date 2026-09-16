@@ -595,9 +595,12 @@ class WebServer:
         except Exception:
             data = {}
         log_path = data.get("log_path")
-        speed = float(data.get("speed", 1.0))
         loop = bool(data.get("loop", False))
-        success = self._on_start_replay(log_path, speed, loop)
+        try:
+            success = self._on_start_replay(log_path, loop)
+        except TypeError:
+            # Fallback for legacy handlers expecting (log_path, speed, loop)
+            success = self._on_start_replay(log_path, 1.0, loop)
         return web.json_response({"success": success})
 
     async def _handle_replay_stop(self, request: web.Request) -> web.Response:

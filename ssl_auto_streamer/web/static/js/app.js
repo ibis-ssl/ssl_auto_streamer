@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ speed: 1.0, loop: false }),
+          body: JSON.stringify({ loop: false }),
         });
         const data = await res.json();
         if (!data.success) {

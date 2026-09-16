@@ -203,3 +203,10 @@ def test_app_dynamic_replay_control() -> None:
     stopped = app.stop_replay()
     assert stopped is True
     assert not app.get_replay_status()["active"]
+
+    # Start replay with legacy positional signature (log_path, speed, loop)
+    success_legacy = app.start_replay(str(SAMPLE_LOG_PATH), 1.0, False)
+    assert success_legacy is True
+    assert app.get_replay_status()["active"] is True
+    assert app.stop_replay() is True
+
