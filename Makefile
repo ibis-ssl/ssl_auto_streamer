@@ -1,4 +1,4 @@
-.PHONY: proto install run clean replay play-log test test-log
+.PHONY: proto install run clean replay play-log test test-log generate-test-data
 
 SAMPLE_LOG ?= tests/data/sample_match.log.gz
 SPEED ?= 1.0
@@ -20,6 +20,9 @@ replay:
 
 play-log:
 	uv run ssl-log-player $(SAMPLE_LOG) --speed $(SPEED)
+
+generate-test-data:
+	uv run ssl-log-generator --all
 
 test:
 	PYTHONPATH="" uv run pytest

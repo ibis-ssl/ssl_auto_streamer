@@ -200,6 +200,25 @@ uv run ssl-log-player tests/data/sample_match.log.gz --speed 1.0
 uv run ssl-log-cutter /path/to/full_match.log.gz cut_sample.log.gz --duration-sec 60.0
 ```
 
+### 4. シナリオ別テストデータ生成ツール (`ssl-log-generator`)
+
+シュート＆ゴール、ファウル、パス連携、PK＆セーブ、プレースメント等の各試合シチュエーションを再現する軽量な合成SSLログファイルをワンコマンドで生成できます。
+
+```bash
+# 全シナリオのテストログを一括生成（tests/data/scenarios/ 配下に出力）
+make generate-test-data
+# または
+uv run ssl-log-generator --all
+
+# 生成されたシナリオログでリプレイ実行
+uv run ssl-auto-streamer --replay-log tests/data/scenarios/scenario_1_goal.log.gz
+uv run ssl-auto-streamer --replay-log tests/data/scenarios/scenario_2_foul_card.log.gz
+uv run ssl-auto-streamer --replay-log tests/data/scenarios/scenario_3_pass_chain.log.gz
+uv run ssl-auto-streamer --replay-log tests/data/scenarios/scenario_4_penalty_save.log.gz
+uv run ssl-auto-streamer --replay-log tests/data/scenarios/scenario_5_ball_out.log.gz
+uv run ssl-auto-streamer --replay-log tests/data/scenarios/scenario_6_minimal_smoke.log.gz
+```
+
 ## 開発
 
 ```bash

@@ -127,8 +127,8 @@ def test_world_model_and_event_detector_with_sample_log() -> None:
     detected_events = []
 
     with SSLLogReader(SAMPLE_LOG_PATH) as reader:
-        # Process first 5000 packets (~10 seconds of match)
-        for pkt in reader.iter_packets(max_packets=5000):
+        # Process first 8000 packets (~20 seconds of match, including 10s pre-kickoff)
+        for pkt in reader.iter_packets(max_packets=8000):
             if pkt.message_type == MSG_TYPE_SSL_VISION_TRACKER_2020:
                 tracker = pkt.decode()
                 if tracker and tracker.HasField("tracked_frame"):

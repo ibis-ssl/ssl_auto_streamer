@@ -15,6 +15,7 @@ dependencies = [
 ssl-auto-streamer = "ssl_auto_streamer.main:main"
 ssl-log-player = "ssl_auto_streamer.tools.log_player:main"
 ssl-log-cutter = "ssl_auto_streamer.tools.log_cutter:main"
+ssl-log-generator = "ssl_auto_streamer.tools.log_generator:main"
 
 [dependency-groups]
 dev = ["grpcio-tools>=1.60", "ruff", "pytest"]
@@ -27,7 +28,7 @@ build-backend = "hatchling.build"
 packages = ["ssl_auto_streamer"]
 
 [tool.pytest.ini_options]
-addopts = "-p no:launch_testing"
+addopts = "-p no:launch_testing -p no:launch_pytest"
 
 [tool.ruff]
 extend-exclude = ["ssl_auto_streamer/ssl/*_pb2.py"]

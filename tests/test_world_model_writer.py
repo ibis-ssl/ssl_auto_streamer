@@ -173,3 +173,46 @@ def test_world_model_reader_handles_possible_goal_and_review():
     assert analysis_req is not None
     assert analysis_req.event_data["analysis_type"] == "goal_under_review"
     assert "VAR" in analysis_req.event_data["instruction"]
+
+
+def test_goal_inherits_shot_speed_and_calculates_distance_from_kick_location():
+    writer = WorldModelWriter()
+
+    # 1. SHOT event with 6.5 m/s
+    writer.add_event(
+        "SHOT",
+        {
+            "ball_speed": 6.49,
+            "position": {"x": -2.38, "y": -1.04},
+            "primary_robot": {"id": 2, "team": "yellow"},
+            "metadata": {"speed_mps": 6.49},
+        },
+    )
+
+    # 2. GOAL event with ball_speed=0.0 and kick_location from GC
+    writer.add_event(
+        "GOAL",
+        {
+            "ball_speed": 0.0,
+            "position": {"x": -6.0, "y": -0.85},
+            "primary_robot": {"id": 2, "team": "yellow"},
+            "metadata": {
+                "by_team": "yellow",
+                "kicking_bot": 2,
+                "kick_location": {"x": -2.38, "y": -1.04},
+            },
+        },
+    )
+
+    # Verify goal highlight details
+    details = writer.get_highlight_details_data(highlight_type="goal")
+    assert details["total_available"] >= 1
+    top = details["highlights"][0]
+    assert top["type"] == "goal"
+    assert top["shot_details"]["ball_speed_mps"] == 6.5
+    assert top["shooter"]["robot_id"] == 2
+    assert top["shooter"]["team"] == "yellow"
+    assert top["shooter"]["position_at_shot"] == {"x": -2.38, "y": -1.04}
+    # Distance from (-2.38, -1.04) to (-6.0, 0.0) is approx sqrt((-3.62)^2 + (-1.04)^2) ≈ 3.77m
+    assert 3.5 <= top["shooter"]["distance_to_goal_m"] <= 4.0
+

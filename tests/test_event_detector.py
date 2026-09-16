@@ -4,6 +4,7 @@ from ssl_auto_streamer.event_detector import EventDetector, _GC_EVENT_MAP
 from ssl_auto_streamer.ssl import ssl_gc_common_pb2 as common_pb
 from ssl_auto_streamer.ssl import ssl_gc_game_event_pb2 as game_event_pb
 from ssl_auto_streamer.ssl import ssl_gc_referee_message_pb2 as referee_pb
+from ssl_auto_streamer.ssl import ssl_vision_detection_tracked_pb2 as tracked_pb
 
 
 def _referee(command=None, counter=1):
@@ -201,4 +202,37 @@ def test_possible_goal_gc_game_event_is_mapped_to_possible_goal():
     assert event.event_type == "POSSIBLE_GOAL"
     assert event.metadata["by_team"] == "blue"
     assert event.metadata["kicking_bot"] == 7
+
+
+def test_find_nearest_robot_without_visibility_field():
+    detector = EventDetector()
+    frame = tracked_pb.TrackedFrame()
+    frame.timestamp = 1.0
+    r = frame.robots.add()
+    r.robot_id.id = 2
+    r.robot_id.team = 1  # YELLOW
+    r.pos.x = 0.0
+    r.pos.y = 0.0
+
+    nearest = detector._find_nearest_robot(frame, (0.05, 0.0), "yellow")
+    assert nearest is not None
+    assert nearest["id"] == 2
+    assert nearest["team"] == "yellow"
+
+
+def test_possible_goal_inherits_last_shot_speed():
+    detector = EventDetector()
+    detector._last_shot_speed = 6.5
+    detector._last_shot_time = 100.0
+
+    referee = _referee()
+    pg = referee.game_events.add().possible_goal
+    pg.by_team = common_pb.YELLOW
+    pg.kicking_bot = 2
+
+    events = detector.update_from_referee(referee)
+    assert len(events) == 1
+    assert events[0].event_type == "POSSIBLE_GOAL"
+    assert events[0].ball_speed == pytest.approx(6.5)
+    assert events[0].metadata["speed_mps"] == pytest.approx(6.5)
 

@@ -1,0 +1,71 @@
+{
+  "description": "Edge case test frames for TrackedFrame parsing and boundary conditions",
+  "cases": [
+    {
+      "name": "ball_out_of_bounds",
+      "description": "Ball detected far beyond field boundary",
+      "ball": {
+        "pos": {"x": 8.5, "y": 6.2, "z": 0.02},
+        "vel": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "visibility": 0.8
+      },
+      "robots": []
+    },
+    {
+      "name": "ball_super_high_speed",
+      "description": "Ball speed exceeding normal physical limit (e.g., vision glitch)",
+      "ball": {
+        "pos": {"x": 0.0, "y": 0.0, "z": 0.02},
+        "vel": {"x": 25.0, "y": 15.0, "z": 0.0},
+        "visibility": 0.95
+      },
+      "robots": []
+    },
+    {
+      "name": "occluded_robots_zero_visibility",
+      "description": "Robots with visibility < 0.5 (should be ignored by possessor detection)",
+      "ball": {
+        "pos": {"x": 1.0, "y": 1.0, "z": 0.02},
+        "vel": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "visibility": 1.0
+      },
+      "robots": [
+        {
+          "id": 1,
+          "team": "blue",
+          "pos": {"x": 1.02, "y": 1.01},
+          "visibility": 0.2
+        },
+        {
+          "id": 2,
+          "team": "yellow",
+          "pos": {"x": 1.03, "y": 1.02},
+          "visibility": 0.1
+        }
+      ]
+    },
+    {
+      "name": "stacked_robots_same_position",
+      "description": "Multiple robots with identical coordinates (crash/overlap)",
+      "ball": {
+        "pos": {"x": 0.0, "y": 0.0, "z": 0.02},
+        "vel": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "visibility": 1.0
+      },
+      "robots": [
+        {
+          "id": 3,
+          "team": "blue",
+          "pos": {"x": 0.0, "y": 0.0},
+          "visibility": 1.0
+        },
+        {
+          "id": 3,
+          "team": "yellow",
+          "pos": {"x": 0.0, "y": 0.0},
+          "visibility": 1.0
+        }
+      ]
+    }
+  ]
+}

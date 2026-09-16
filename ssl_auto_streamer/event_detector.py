@@ -157,8 +157,11 @@ class EventDetector:
         self._prev_ball_pos: Optional[Tuple[float, float]] = None
         self._prev_ball_speed: float = 0.0
         self._prev_possessor: Optional[Dict] = None  # {"id": int, "team": str}
+        self._recent_possessors: List[Tuple[float, Dict]] = []
         self._shot_in_progress: bool = False
         self._shot_start_time: float = 0.0
+        self._last_shot_speed: float = 0.0
+        self._last_shot_time: float = 0.0
         self._last_ball_pos: Tuple[float, float] = (0.0, 0.0)
 
     def update_from_referee(self, referee: Any) -> List[DetectedEvent]:
@@ -237,6 +240,12 @@ class EventDetector:
         current_possessor = self._determine_possessor(
             ball_pos, nearest_blue, nearest_yellow
         )
+        now = float(getattr(frame, "timestamp", 0.0) or time.time())
+        if current_possessor is not None:
+            self._recent_possessors.append((now, current_possessor))
+            self._recent_possessors = [
+                (t, p) for t, p in self._recent_possessors if now - t <= 0.5
+            ]
 
         # Pass detection (same team, new robot near ball, ball moving)
         if (
@@ -264,6 +273,8 @@ class EventDetector:
         ):
             if self._is_shot_direction(ball_pos, ball.vel.x, ball.vel.y):
                 shooter = current_possessor or self._prev_possessor
+                if not shooter and self._recent_possessors:
+                    shooter = self._recent_possessors[-1][1]
                 events.append(
                     DetectedEvent(
                         event_type="SHOT",
@@ -275,7 +286,9 @@ class EventDetector:
                     )
                 )
                 self._shot_in_progress = True
-                self._shot_start_time = time.time()
+                self._shot_start_time = now
+                self._last_shot_speed = ball_speed
+                self._last_shot_time = now
 
         # Reset shot flag when ball slows down
         if ball_speed < 1.0 and self._shot_in_progress:
@@ -353,6 +366,12 @@ class EventDetector:
             primary_robot, secondary_robot = self._extract_event_robots(metadata)
 
         ball_speed = float(metadata.get("initial_ball_speed", 0.0))
+        if detected_type in ("GOAL", "POSSIBLE_GOAL") and ball_speed <= 0.1:
+            if self._last_shot_speed > 0:
+                ball_speed = self._last_shot_speed
+                metadata["shot_speed"] = round(self._last_shot_speed, 2)
+                metadata["speed_mps"] = round(self._last_shot_speed, 2)
+
         return DetectedEvent(
             event_type=detected_type,
             position=position,
@@ -618,8 +637,9 @@ class EventDetector:
         for robot in frame.robots:
             if robot.robot_id.team != team_id:
                 continue
-            if robot.visibility < 0.5:
-                continue
+            if hasattr(robot, "HasField") and robot.HasField("visibility"):
+                if robot.visibility < 0.5:
+                    continue
 
             dist = math.hypot(robot.pos.x - ball_pos[0], robot.pos.y - ball_pos[1])
             if dist < min_dist:

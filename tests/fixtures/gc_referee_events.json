@@ -1,0 +1,117 @@
+{
+  "description": "Representative Game Controller GameEvent test fixtures for unit tests",
+  "events": [
+    {
+      "name": "goal_yellow",
+      "event_type": "GOAL",
+      "expected_detected_type": "GOAL",
+      "payload": {
+        "by_team": "yellow",
+        "kicking_team": "yellow",
+        "kicking_bot": 2,
+        "location": {"x": 6.05, "y": 0.0},
+        "kick_location": {"x": 1.5, "y": 0.0},
+        "max_ball_height": 0.15,
+        "num_robots_by_team": 6
+      }
+    },
+    {
+      "name": "possible_goal_blue",
+      "event_type": "POSSIBLE_GOAL",
+      "expected_detected_type": "POSSIBLE_GOAL",
+      "payload": {
+        "by_team": "blue",
+        "kicking_team": "blue",
+        "kicking_bot": 5,
+        "location": {"x": -6.02, "y": 0.1},
+        "kick_location": {"x": -2.0, "y": -0.5}
+      }
+    },
+    {
+      "name": "bot_crash_unique",
+      "event_type": "BOT_CRASH_UNIQUE",
+      "expected_detected_type": "COLLISION",
+      "payload": {
+        "by_team": "blue",
+        "violator": 3,
+        "victim": 1,
+        "location": {"x": -1.0, "y": 1.0},
+        "crash_speed": 3.2,
+        "crash_angle": 1.57
+      }
+    },
+    {
+      "name": "bot_pushed_bot",
+      "event_type": "BOT_PUSHED_BOT",
+      "expected_detected_type": "COLLISION",
+      "payload": {
+        "by_team": "yellow",
+        "violator": 4,
+        "victim": 2,
+        "location": {"x": 0.5, "y": -1.2},
+        "pushed_distance": 0.45
+      }
+    },
+    {
+      "name": "ball_left_field_touch_line",
+      "event_type": "BALL_LEFT_FIELD_TOUCH_LINE",
+      "expected_detected_type": "BALL_OUT",
+      "payload": {
+        "by_team": "blue",
+        "location": {"x": 0.5, "y": 4.52}
+      }
+    },
+    {
+      "name": "ball_left_field_goal_line",
+      "event_type": "BALL_LEFT_FIELD_GOAL_LINE",
+      "expected_detected_type": "BALL_OUT",
+      "payload": {
+        "by_team": "yellow",
+        "location": {"x": -6.05, "y": 2.1}
+      }
+    },
+    {
+      "name": "placement_succeeded",
+      "event_type": "PLACEMENT_SUCCEEDED",
+      "expected_detected_type": "BALL_PLACEMENT_SUCCEEDED",
+      "payload": {
+        "by_team": "yellow",
+        "time_taken": 4.2,
+        "precision": 0.02,
+        "distance": 2.5
+      }
+    },
+    {
+      "name": "placement_failed",
+      "event_type": "PLACEMENT_FAILED",
+      "expected_detected_type": "BALL_PLACEMENT_FAILED",
+      "payload": {
+        "by_team": "blue",
+        "remaining_distance": 0.35
+      }
+    },
+    {
+      "name": "bot_kicked_ball_too_fast",
+      "event_type": "BOT_KICKED_BALL_TOO_FAST",
+      "expected_detected_type": "FAST_SHOT",
+      "payload": {
+        "by_team": "yellow",
+        "by_bot": 2,
+        "location": {"x": 1.0, "y": 0.0},
+        "initial_ball_speed": 7.2,
+        "chipped": false
+      }
+    },
+    {
+      "name": "bot_dribbled_ball_too_far",
+      "event_type": "BOT_DRIBBLED_BALL_TOO_FAR",
+      "expected_detected_type": "FOUL",
+      "payload": {
+        "by_team": "blue",
+        "by_bot": 1,
+        "start": {"x": 0.0, "y": 0.0},
+        "end": {"x": 1.8, "y": 0.0}
+      }
+    }
+  ]
+}

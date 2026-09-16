@@ -358,10 +358,11 @@ class WorldModelWriter:
 
             # Update match statistics
             metadata = data.get("metadata", {})
+            primary = data.get("primary_robot")
             robot_team = (
-                data.get("primary_robot", {}).get("team")
-                or metadata.get("by_team")
-                or metadata.get("team")
+                (primary.get("team") if isinstance(primary, dict) else None)
+                or (metadata.get("by_team") if isinstance(metadata, dict) else None)
+                or (metadata.get("team") if isinstance(metadata, dict) else None)
                 or "blue"
             )
             team_key = robot_team if robot_team in ("blue", "yellow") else "blue"
@@ -376,6 +377,19 @@ class WorldModelWriter:
                 stats["passes"] += 1
             elif event_type == "FOUL":
                 stats["fouls"] += 1
+
+            # If GOAL or POSSIBLE_GOAL has zero or low ball speed, inherit from recent shot
+            if event_type in ("GOAL", "POSSIBLE_GOAL"):
+                try:
+                    cur_speed = float(data.get("ball_speed", 0.0))
+                except (ValueError, TypeError):
+                    cur_speed = 0.0
+                if cur_speed <= 0.1:
+                    shot_speed = self._find_recent_shot_speed()
+                    if shot_speed > 0.0:
+                        data["ball_speed"] = shot_speed
+                        if "metadata" in data and isinstance(data["metadata"], dict):
+                            data["metadata"]["speed_mps"] = round(shot_speed, 2)
 
             if event_type == "POSSIBLE_GOAL":
                 self._is_goal_under_review = True
@@ -427,6 +441,20 @@ class WorldModelWriter:
             self._context.momentum = "YELLOW"
         else:
             self._context.momentum = "NEUTRAL"
+
+    def _find_recent_shot_speed(self) -> float:
+        """Find the ball speed of the most recent SHOT or FAST_SHOT event."""
+        for h in reversed(self._highlights):
+            if h.event_type in ("SHOT", "FAST_SHOT"):
+                speed = h.data.get("ball_speed") or h.data.get("metadata", {}).get("speed_mps")
+                if speed and float(speed) > 0.1:
+                    return float(speed)
+        for ev in reversed(self._event_history):
+            if ev.get("type") in ("SHOT", "FAST_SHOT"):
+                speed = ev.get("data", {}).get("ball_speed") or ev.get("data", {}).get("metadata", {}).get("speed_mps")
+                if speed and float(speed) > 0.1:
+                    return float(speed)
+        return 0.0
 
     def _calculate_highlight_score(
         self, event_type: str, data: Dict[str, Any]
@@ -629,10 +657,10 @@ class WorldModelWriter:
         count = min(count, 5)
         with self._lock:
             type_mapping = {
-                "goal": ["GOAL"],
+                "goal": ["GOAL", "POSSIBLE_GOAL"],
                 "shot": ["SHOT", "FAST_SHOT"],
                 "save": ["SAVE"],
-                "any": ["GOAL", "SHOT", "FAST_SHOT", "SAVE"],
+                "any": ["GOAL", "POSSIBLE_GOAL", "SHOT", "FAST_SHOT", "SAVE"],
             }
             allowed_types = type_mapping.get(highlight_type, type_mapping["any"])
             filtered = [h for h in self._highlights if h.event_type in allowed_types]
@@ -1000,20 +1028,33 @@ class WorldModelWriter:
         }
 
         data = highlight.data
-        if "primary_robot" in data:
+        metadata = data.get("metadata", {}) if isinstance(data.get("metadata"), dict) else {}
+        kick_loc = metadata.get("kick_location") or data.get("kick_location")
+
+        if "primary_robot" in data and isinstance(data["primary_robot"], dict):
             robot_info = data["primary_robot"]
             robot_team = robot_info.get("team", "blue")
+            pos_at_shot = kick_loc or data.get("position", {"x": 0, "y": 0})
             result["shooter"] = {
                 "robot_id": robot_info.get("id", -1),
                 "team": robot_team,
-                "position_at_shot": data.get("position", {"x": 0, "y": 0}),
+                "position_at_shot": pos_at_shot,
                 "distance_to_goal_m": self._calculate_distance_to_goal(
-                    data.get("position", {"x": 0, "y": 0}),
+                    pos_at_shot,
                     robot_team,
                 ),
             }
 
-        ball_speed = data.get("ball_speed", 0)
+        try:
+            ball_speed = float(data.get("ball_speed", 0.0))
+        except (ValueError, TypeError):
+            ball_speed = 0.0
+
+        if ball_speed <= 0.1 and highlight.event_type in ("GOAL", "POSSIBLE_GOAL"):
+            recent_speed = self._find_recent_shot_speed()
+            if recent_speed > 0.1:
+                ball_speed = recent_speed
+
         result["shot_details"] = {
             "ball_speed_mps": round(ball_speed, 1),
             "shot_angle_deg": self._estimate_shot_angle(data),
@@ -1029,7 +1070,7 @@ class WorldModelWriter:
                 "dive_direction": self._estimate_dive_direction(data),
                 "save_attempt": True,
             }
-        elif highlight.event_type == "GOAL":
+        elif highlight.event_type in ("GOAL", "POSSIBLE_GOAL"):
             scoring_team = data.get("primary_robot", {}).get("team", "blue")
             defending_team = "yellow" if scoring_team == "blue" else "blue"
             defending_goalie = self._blue_goalie_id if defending_team == "blue" else self._yellow_goalie_id
