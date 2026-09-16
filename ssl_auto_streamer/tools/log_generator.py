@@ -76,6 +76,8 @@ def create_referee_message(
     yellow_name: str = "ibis",
     blue_score: int = 0,
     yellow_score: int = 0,
+    blue_yellow_cards: int = 0,
+    yellow_yellow_cards: int = 0,
     designated_position: Optional[Tuple[float, float]] = None,
     game_events: Optional[List[event_pb.GameEvent]] = None,
 ) -> bytes:
@@ -91,7 +93,7 @@ def create_referee_message(
     ref.yellow.name = yellow_name
     ref.yellow.score = yellow_score
     ref.yellow.red_cards = 0
-    ref.yellow.yellow_cards = 0
+    ref.yellow.yellow_cards = yellow_yellow_cards
     ref.yellow.timeouts = 4
     ref.yellow.timeout_time = 300_000_000
     ref.yellow.goalkeeper = 0
@@ -99,7 +101,7 @@ def create_referee_message(
     ref.blue.name = blue_name
     ref.blue.score = blue_score
     ref.blue.red_cards = 0
-    ref.blue.yellow_cards = 0
+    ref.blue.yellow_cards = blue_yellow_cards
     ref.blue.timeouts = 4
     ref.blue.timeout_time = 300_000_000
     ref.blue.goalkeeper = 0
@@ -699,6 +701,344 @@ def generate_scenario_6_minimal_smoke(writer: SSLLogWriter) -> None:
         writer.write_packet(ts_ns, MSG_TYPE_SSL_VISION_TRACKER_2020, tracker_bytes)
 
 
+def generate_scenario_7_counter_attack_goal(writer: SSLLogWriter, fps: int = 30) -> None:
+    """
+    Scenario 7: Full Counter Attack & Rebound Goal (~42 sec).
+    Timeline:
+      0.0s - 2.5s: Kickoff Yellow preparation
+      2.5s - 4.0s: Kickoff -> In-play
+      4.0s - 11.0s: Yellow build-up passes (Yellow 1 -> Yellow 2)
+      11.0s - 14.0s: Blue #3 intercepts ball! (INTERCEPTION)
+      14.0s - 19.0s: Fast counter attack by Blue #3 down the wing
+      19.0s - 20.5s: Blue #3 shoots (speed 6.0 m/s), Yellow GK saves! (SHOT, SAVE)
+      20.5s - 22.5s: Rebound loose ball, Blue #2 follows up and shoots!
+      22.5s - 25.0s: Ball crosses goal line (POSSIBLE_GOAL, HALT)
+      25.0s - 30.0s: Referee review in progress
+      30.0s - 35.0s: Goal officially confirmed (GOAL, score 1-0 Blue)
+      35.0s - 42.0s: Match stopped, analyst commentary & tactical breakdown
+    """
+    dt = 1.0 / fps
+    total_frames = int(42.0 * fps)
+    geom_bytes = create_default_geometry()
+    writer.write_packet(0, MSG_TYPE_SSL_VISION_2014, geom_bytes)
+
+    cmd_counter = 1
+    # Initial kickoff referee message
+    writer.write_packet(
+        0,
+        MSG_TYPE_SSL_REFBOX_2013,
+        create_referee_message(0, ref_pb.Referee.PREPARE_KICKOFF_YELLOW, cmd_counter),
+    )
+
+    blue_bots = [
+        (0, 5.8, 0.0, math.pi),
+        (1, 4.0, 1.5, math.pi),
+        (2, 3.0, -1.0, math.pi),
+        (3, 1.0, 1.0, math.pi),
+    ]
+    yellow_bots = [
+        (0, -5.8, 0.0, 0.0),
+        (1, 0.0, 0.0, 0.0),
+        (2, -1.5, 1.5, 0.0),
+        (3, -2.0, -1.5, 0.0),
+    ]
+
+    ball_pos = (0.0, 0.0)
+    ball_vel = (0.0, 0.0)
+
+    for i in range(total_frames):
+        t = i * dt
+        ts_ns = int(t * 1e9)
+
+        if i == int(2.5 * fps):
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.NORMAL_START, cmd_counter),
+            )
+        elif i == int(4.0 * fps):
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.FORCE_START, cmd_counter),
+            )
+        elif i == int(22.5 * fps):
+            cmd_counter += 1
+            ge = event_pb.GameEvent()
+            ge.type = event_pb.GameEvent.POSSIBLE_GOAL
+            pg = ge.possible_goal
+            pg.by_team = common_pb.BLUE
+            pg.kicking_team = common_pb.BLUE
+            pg.kicking_bot = 2
+            pg.location.x = -6.05
+            pg.location.y = 0.2
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(
+                    ts_ns, ref_pb.Referee.HALT, cmd_counter, blue_score=0, yellow_score=0, game_events=[ge]
+                ),
+            )
+        elif i == int(25.0 * fps):
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.STOP, cmd_counter, blue_score=0, yellow_score=0),
+            )
+        elif i == int(30.0 * fps):
+            cmd_counter += 1
+            ge = event_pb.GameEvent()
+            ge.type = event_pb.GameEvent.GOAL
+            g = ge.goal
+            g.by_team = common_pb.BLUE
+            g.kicking_team = common_pb.BLUE
+            g.kicking_bot = 2
+            g.location.x = -6.05
+            g.location.y = 0.2
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(
+                    ts_ns, ref_pb.Referee.STOP, cmd_counter, blue_score=1, yellow_score=0, game_events=[ge]
+                ),
+            )
+
+        # Dynamic motion
+        if t < 4.0:
+            ball_pos = (0.0, 0.0)
+            ball_vel = (0.0, 0.0)
+        elif t < 7.0:
+            # Yellow #1 passes to Yellow #2 at (-1.5, 1.5)
+            alpha = (t - 4.0) / 3.0
+            ball_pos = (alpha * -1.5, alpha * 1.5)
+            ball_vel = (-1.0, 1.0)
+        elif t < 11.0:
+            # Yellow #2 holds ball
+            ball_pos = (-1.5, 1.5)
+            ball_vel = (0.0, 0.0)
+            # Blue #3 approaches
+            blue_bots[3] = (3, 1.0 - (t - 7.0) * 0.6, 1.5, math.pi)
+        elif t < 12.0:
+            # Yellow #2 tries to pass across to Yellow #3 (-2.0, -1.5)
+            # Blue #3 intercepts at (-1.4, 1.0)
+            ball_pos = (-1.4, 1.2)
+            ball_vel = (0.5, -2.0)
+            blue_bots[3] = (3, -1.4, 1.1, -math.pi / 2)
+        elif t < 18.0:
+            # Blue #3 counter attack dribbling towards yellow goal (-5.8, 0.0)
+            progress = (t - 12.0) / 6.0
+            bx = -1.4 - progress * 2.5
+            by = 1.0 - progress * 0.8
+            ball_pos = (bx, by)
+            ball_vel = (-2.0, -0.6)
+            blue_bots[3] = (3, bx + 0.1, by, math.pi)
+            # Blue #2 runs in support
+            blue_bots[2] = (2, -3.0 - progress * 1.0, -0.5, math.pi)
+        elif t < 20.0:
+            # Blue #3 shoots at yellow goal! (-5.8, 0.0)
+            alpha = (t - 18.0) / 2.0
+            bx = -3.9 - alpha * 1.8
+            by = 0.2 - alpha * 0.2
+            ball_pos = (bx, by)
+            ball_vel = (-5.5, 0.0)
+        elif t < 21.5:
+            # Yellow GK #0 blocks/saves ball, deflects to (-4.5, -0.8)
+            alpha = (t - 20.0) / 1.5
+            ball_pos = (-5.6 + alpha * 1.1, 0.0 - alpha * 0.8)
+            ball_vel = (2.0, -1.5)
+        elif t < 22.5:
+            # Blue #2 strikes rebound shot into the net!
+            alpha = (t - 21.5) / 1.0
+            bx = -4.5 - alpha * 1.6
+            by = -0.8 + alpha * 1.0
+            ball_pos = (bx, by)
+            ball_vel = (-6.0, 3.5)
+        else:
+            # Ball inside net
+            ball_pos = (-6.1, 0.2)
+            ball_vel = (0.0, 0.0)
+
+        tracker_bytes = create_tracker_frame(
+            frame_number=i,
+            timestamp_sec=t,
+            ball_pos=ball_pos,
+            ball_vel=ball_vel,
+            blue_robots=blue_bots,
+            yellow_robots=yellow_bots,
+        )
+        writer.write_packet(ts_ns, MSG_TYPE_SSL_VISION_TRACKER_2020, tracker_bytes)
+
+
+def generate_scenario_8_tactical_foul_and_card(writer: SSLLogWriter, fps: int = 30) -> None:
+    """
+    Scenario 8: Build-up, Heavy Foul, Yellow Card, Free Kick & Ball Placement (~40 sec).
+    Timeline:
+      0.0s - 4.0s: In play, Blue team passing in midfield
+      4.0s - 9.0s: Yellow #2 intercepts and breaks forward
+      9.0s - 11.5s: Blue #1 crashes violently into Yellow #2 from behind (BOT_CRASH_UNIQUE)
+      11.5s - 14.0s: Referee stops game (STOP)
+      14.0s - 18.0s: Yellow card given to Blue #1 (YELLOW_CARD_BLUE)
+      18.0s - 24.0s: Halt/Stop, tactical analyst commentary on foul & card accumulation
+      24.0s - 27.0s: Direct free kick awarded to Yellow (DIRECT_FREE_YELLOW)
+      27.0s - 32.0s: Yellow takes free kick, shoots -> Blue keeper deflects over line (BALL_OUT)
+      32.0s - 40.0s: Ball placement called (BALL_PLACEMENT_BLUE) and executed
+    """
+    dt = 1.0 / fps
+    total_frames = int(40.0 * fps)
+    geom_bytes = create_default_geometry()
+    writer.write_packet(0, MSG_TYPE_SSL_VISION_2014, geom_bytes)
+
+    cmd_counter = 1
+    # Start in play
+    writer.write_packet(
+        0,
+        MSG_TYPE_SSL_REFBOX_2013,
+        create_referee_message(0, ref_pb.Referee.FORCE_START, cmd_counter),
+    )
+
+    blue_bots = [
+        (0, 5.8, 0.0, math.pi),
+        (1, 0.5, 0.5, math.pi),
+        (2, -1.0, -1.5, math.pi),
+    ]
+    yellow_bots = [
+        (0, -5.8, 0.0, 0.0),
+        (1, 2.0, -1.0, 0.0),
+        (2, -0.5, 0.2, 0.0),
+    ]
+
+    ball_pos = (0.0, 0.0)
+    ball_vel = (0.0, 0.0)
+
+    for i in range(total_frames):
+        t = i * dt
+        ts_ns = int(t * 1e9)
+
+        if i == int(11.5 * fps):
+            # Referee Stop with Crash Foul
+            cmd_counter += 1
+            ge = event_pb.GameEvent()
+            ge.type = event_pb.GameEvent.BOT_CRASH_UNIQUE
+            crash = ge.bot_crash_unique
+            crash.by_team = common_pb.BLUE
+            crash.violator = 1
+            crash.victim = 2
+            crash.location.x = 0.2
+            crash.location.y = 0.3
+            crash.crash_speed = 3.6
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.STOP, cmd_counter, game_events=[ge]),
+            )
+        elif i == int(14.0 * fps):
+            # Yellow card issued to Blue team
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.STOP, cmd_counter, blue_yellow_cards=1),
+            )
+        elif i == int(24.0 * fps):
+            # Direct free kick yellow
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.DIRECT_FREE_YELLOW, cmd_counter, blue_yellow_cards=1),
+            )
+        elif i == int(27.0 * fps):
+            # Free kick taken (Inplay)
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.FORCE_START, cmd_counter, blue_yellow_cards=1),
+            )
+        elif i == int(31.0 * fps):
+            # Ball deflected out of bounds over goal line
+            cmd_counter += 1
+            ge = event_pb.GameEvent()
+            ge.type = event_pb.GameEvent.BALL_LEFT_FIELD_GOAL_LINE
+            bl = ge.ball_left_field_goal_line
+            bl.by_team = common_pb.BLUE
+            bl.location.x = 6.05
+            bl.location.y = 3.5
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(ts_ns, ref_pb.Referee.STOP, cmd_counter, blue_yellow_cards=1, game_events=[ge]),
+            )
+        elif i == int(33.0 * fps):
+            # Ball placement blue designated
+            cmd_counter += 1
+            writer.write_packet(
+                ts_ns,
+                MSG_TYPE_SSL_REFBOX_2013,
+                create_referee_message(
+                    ts_ns,
+                    ref_pb.Referee.BALL_PLACEMENT_BLUE,
+                    cmd_counter,
+                    blue_yellow_cards=1,
+                    designated_position=(4.5, -2.5),
+                ),
+            )
+
+        # Dynamic motion
+        if t < 4.0:
+            ball_pos = (-0.5 + t * 0.2, -1.0 + t * 0.2)
+            ball_vel = (0.5, 0.5)
+        elif t < 9.0:
+            # Yellow #2 on the ball advancing
+            alpha = (t - 4.0) / 5.0
+            ball_pos = (alpha * 0.8, alpha * 0.4)
+            ball_vel = (0.8, 0.4)
+            yellow_bots[2] = (2, alpha * 0.8 - 0.1, alpha * 0.4, 0.0)
+            # Blue #1 chasing fast from behind
+            blue_bots[1] = (1, alpha * 0.8 - 0.3, alpha * 0.4, 0.0)
+        elif t < 11.5:
+            # Collision impact at (0.2, 0.3)
+            ball_pos = (0.2, 0.3)
+            ball_vel = (0.0, 0.0)
+            yellow_bots[2] = (2, 0.2, 0.3, 0.5)
+            blue_bots[1] = (1, 0.2, 0.3, 0.0)
+        elif t < 27.0:
+            # Stoppage at (0.2, 0.3)
+            ball_pos = (0.2, 0.3)
+            ball_vel = (0.0, 0.0)
+        elif t < 31.0:
+            # Yellow takes shot towards blue goal (5.8, 0.0), deflects wide
+            alpha = (t - 27.0) / 4.0
+            bx = 0.2 + alpha * 5.9
+            by = 0.3 + alpha * 3.5
+            ball_pos = (bx, by)
+            ball_vel = (5.5, 3.2)
+        elif t < 34.0:
+            # Ball out over touchline/goal line at (6.1, 3.8)
+            ball_pos = (6.1, 3.8)
+            ball_vel = (0.0, 0.0)
+        else:
+            # Ball being placed to designated position (4.5, -2.5)
+            alpha = min(1.0, (t - 34.0) / 5.0)
+            bx = 6.1 + alpha * (4.5 - 6.1)
+            by = 3.8 + alpha * (-2.5 - 3.8)
+            ball_pos = (bx, by)
+            ball_vel = (-0.5, -1.5) if alpha < 1.0 else (0.0, 0.0)
+
+        tracker_bytes = create_tracker_frame(
+            frame_number=i,
+            timestamp_sec=t,
+            ball_pos=ball_pos,
+            ball_vel=ball_vel,
+            blue_robots=blue_bots,
+            yellow_robots=yellow_bots,
+        )
+        writer.write_packet(ts_ns, MSG_TYPE_SSL_VISION_TRACKER_2020, tracker_bytes)
+
+
 SCENARIOS: Dict[str, Tuple[Callable[[SSLLogWriter], None], str]] = {
     "scenario_1_goal": (generate_scenario_1_goal, "Shot & Goal sequence"),
     "scenario_2_foul_card": (generate_scenario_2_foul_card, "Robot collision & card foul"),
@@ -706,6 +1046,8 @@ SCENARIOS: Dict[str, Tuple[Callable[[SSLLogWriter], None], str]] = {
     "scenario_4_penalty_save": (generate_scenario_4_penalty_save, "Penalty kick & goalkeeper save"),
     "scenario_5_ball_out": (generate_scenario_5_ball_out, "Ball out of bounds & ball placement"),
     "scenario_6_minimal_smoke": (generate_scenario_6_minimal_smoke, "Minimal smoke test log"),
+    "scenario_7_counter_attack_goal": (generate_scenario_7_counter_attack_goal, "Full counter attack & rebound goal (~42s)"),
+    "scenario_8_tactical_foul_and_card": (generate_scenario_8_tactical_foul_and_card, "Build-up, violent foul, yellow card & free kick (~40s)"),
 }
 
 

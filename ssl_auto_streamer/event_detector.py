@@ -152,6 +152,11 @@ class EventDetector:
         self._last_gc_command: Optional[int] = None
         self._last_gc_command_counter: Optional[int] = None
         self._last_gc_stage: Optional[int] = None
+        self._cards_initialized: bool = False
+        self._last_blue_yellow_cards: int = 0
+        self._last_yellow_yellow_cards: int = 0
+        self._last_blue_red_cards: int = 0
+        self._last_yellow_red_cards: int = 0
 
         # Tracker heuristics state
         self._prev_ball_pos: Optional[Tuple[float, float]] = None
@@ -218,6 +223,62 @@ class EventDetector:
                 events.append(stage_event)
 
         self._last_gc_stage = current_stage
+
+        # Detect card changes (yellow / red cards)
+        if hasattr(referee, "blue") and hasattr(referee, "yellow"):
+            blue_yc = int(getattr(referee.blue, "yellow_cards", 0))
+            yellow_yc = int(getattr(referee.yellow, "yellow_cards", 0))
+            blue_rc = int(getattr(referee.blue, "red_cards", 0))
+            yellow_rc = int(getattr(referee.yellow, "red_cards", 0))
+
+            if self._cards_initialized:
+                if blue_yc > self._last_blue_yellow_cards:
+                    events.append(
+                        DetectedEvent(
+                            event_type="YELLOW_CARD",
+                            position=(0.0, 0.0),
+                            ball_speed=0.0,
+                            confidence=1.0,
+                            metadata={"team": "blue", "yellow_cards": blue_yc},
+                        )
+                    )
+                if yellow_yc > self._last_yellow_yellow_cards:
+                    events.append(
+                        DetectedEvent(
+                            event_type="YELLOW_CARD",
+                            position=(0.0, 0.0),
+                            ball_speed=0.0,
+                            confidence=1.0,
+                            metadata={"team": "yellow", "yellow_cards": yellow_yc},
+                        )
+                    )
+                if blue_rc > self._last_blue_red_cards:
+                    events.append(
+                        DetectedEvent(
+                            event_type="RED_CARD",
+                            position=(0.0, 0.0),
+                            ball_speed=0.0,
+                            confidence=1.0,
+                            metadata={"team": "blue", "red_cards": blue_rc},
+                        )
+                    )
+                if yellow_rc > self._last_yellow_red_cards:
+                    events.append(
+                        DetectedEvent(
+                            event_type="RED_CARD",
+                            position=(0.0, 0.0),
+                            ball_speed=0.0,
+                            confidence=1.0,
+                            metadata={"team": "yellow", "red_cards": yellow_rc},
+                        )
+                    )
+            else:
+                self._cards_initialized = True
+
+            self._last_blue_yellow_cards = blue_yc
+            self._last_yellow_yellow_cards = yellow_yc
+            self._last_blue_red_cards = blue_rc
+            self._last_yellow_red_cards = yellow_rc
 
         return events
 

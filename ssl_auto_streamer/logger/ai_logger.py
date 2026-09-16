@@ -126,9 +126,6 @@ class AiActivityLogger:
         self._file_handle = None
         self._session_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        if self._enabled and self._save_to_file:
-            self._init_log_file()
-
     def _init_log_file(self) -> None:
         try:
             self._log_dir.mkdir(parents=True, exist_ok=True)
@@ -148,6 +145,8 @@ class AiActivityLogger:
 
         with self._lock:
             self._recent_logs.append(record_with_ts)
+            if self._enabled and self._save_to_file and not self._file_handle:
+                self._init_log_file()
             if self._file_handle:
                 try:
                     line = json.dumps(record_with_ts, ensure_ascii=False)
@@ -369,6 +368,14 @@ class AiActivityLogger:
         with self._lock:
             ctx = self._active_turns.get(t_id)
             if not ctx:
+                return None
+
+            # すでに中断済みであれば再記録しない
+            if ctx.status.startswith("interrupted"):
+                return None
+
+            # まだ音声を受信していない新ターンの場合、server_interruptedは前ターンのものなのでスキップ
+            if reason == "server_interrupted" and ctx.first_audio_at is None and ctx.audio_total_bytes == 0:
                 return None
 
             ctx.status = (

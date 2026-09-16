@@ -236,3 +236,33 @@ def test_possible_goal_inherits_last_shot_speed():
     assert events[0].ball_speed == pytest.approx(6.5)
     assert events[0].metadata["speed_mps"] == pytest.approx(6.5)
 
+
+def test_card_changes_generate_events():
+    detector = EventDetector()
+    referee = _referee()
+
+    # Initial frame establishes baseline
+    events0 = detector.update_from_referee(referee)
+    assert not any(e.event_type in ("YELLOW_CARD", "RED_CARD") for e in events0)
+
+    # Blue receives yellow card
+    referee.blue.yellow_cards = 1
+    events1 = detector.update_from_referee(referee)
+    yc = [e for e in events1 if e.event_type == "YELLOW_CARD"]
+    assert len(yc) == 1
+    assert yc[0].metadata["team"] == "blue"
+    assert yc[0].metadata["yellow_cards"] == 1
+
+    # Same state emits no duplicates
+    events_dup = detector.update_from_referee(referee)
+    assert not any(e.event_type == "YELLOW_CARD" for e in events_dup)
+
+    # Yellow receives red card
+    referee.yellow.red_cards = 1
+    events2 = detector.update_from_referee(referee)
+    rc = [e for e in events2 if e.event_type == "RED_CARD"]
+    assert len(rc) == 1
+    assert rc[0].metadata["team"] == "yellow"
+    assert rc[0].metadata["red_cards"] == 1
+
+

@@ -124,6 +124,9 @@ class CommentaryApp:
         ai_logger_cfg = config.get("ai_logger", {})
         self._ai_logger = AiActivityLogger(ai_logger_cfg)
         self._current_turn_id: Optional[str] = None
+        self._previous_turn_id: Optional[str] = None
+        self._last_request_time: float = 0.0
+        self._last_request_priority: int = 0
 
         # Gemini client (Live API / audio mode)
         api_key = gemini_cfg.get("api_key") or os.environ.get("GEMINI_API_KEY", "")
@@ -180,14 +183,15 @@ class CommentaryApp:
 
         # Replay settings
         self._replay_log = ssl_cfg.get("replay_log")
-        self._replay_speed = float(ssl_cfg.get("replay_speed", 1.0))
         self._replay_loop = bool(ssl_cfg.get("replay_loop", False))
+        self._replay_exit_on_finish = bool(ssl_cfg.get("replay_exit_on_finish", False))
         self._replay_task: Optional[asyncio.Task] = None
 
         # Commentary settings
         self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
         self._writer_update_rate = commentary_cfg.get("writer_update_rate", 1.0)
         self._interrupt_priority_threshold = commentary_cfg.get("interrupt_priority_threshold", 2)
+        self._auto_start = bool(commentary_cfg.get("auto_start", False))
 
         # State
         self._connected = False
@@ -318,10 +322,14 @@ class CommentaryApp:
             asyncio.create_task(self._reconnect_loop()),
         ]
 
+        if self._auto_start:
+            logger.info("Auto-start commentary enabled: starting streaming...")
+            await self.start_streaming()
+
         if self._replay_log:
             logger.info(
                 f"Replay mode enabled: reading from {self._replay_log} "
-                f"(speed={self._replay_speed}x, loop={self._replay_loop})"
+                f"(loop={self._replay_loop})"
             )
             self._replay_task = asyncio.create_task(self._run_replay_loop())
             tasks.append(self._replay_task)
@@ -391,6 +399,15 @@ class CommentaryApp:
         if uses_server_audio(self._audio_output_mode):
             self._audio_output.flush_buffer()
 
+    @property
+    def _is_speaking(self) -> bool:
+        """Return True if Gemini is generating or audio is currently playing."""
+        if self._gemini_client.is_generating:
+            return True
+        if uses_server_audio(self._audio_output_mode) and self._audio_output.is_playing:
+            return True
+        return False
+
     def _set_audio_output_mode(self, raw_mode: object) -> None:
         """Apply audio output mode changes without restarting the app."""
         if not is_valid_audio_output_mode(raw_mode):
@@ -442,24 +459,26 @@ class CommentaryApp:
                 self._audio_output_mode,
             )
             await self._send_initial_context()
-            blue_name, yellow_name = self._writer.get_team_names()
-            startup_dict = {
-                "mode": "startup",
-                "instruction": "試合前の挨拶として、対戦カード（両チーム名）と簡単な見どころを述べてください。「システム起動」などのメタ発言は禁止。",
-                "teams": {
-                    "blue": get_team_reading_from_data(blue_name, self._team_profiles),
-                    "yellow": get_team_reading_from_data(yellow_name, self._team_profiles),
-                },
-            }
-            startup_msg = json.dumps(startup_dict, ensure_ascii=False)
-            turn_id = self._ai_logger.start_turn(
-                trigger_type="startup",
-                priority=1,
-                payload=startup_dict,
-            )
-            self._current_turn_id = turn_id
-            await self._gemini_client.set_thinking_level(ThinkingLevel.MEDIUM)
-            await self._gemini_client.send_text(startup_msg)
+            if self._writer.are_team_names_known():
+                blue_name, yellow_name = self._writer.get_team_names()
+                startup_dict = {
+                    "mode": "startup",
+                    "instruction": "試合前の挨拶として、対戦カード（両チーム名）と簡単な見どころを述べてください。「システム起動」などのメタ発言は禁止。",
+                    "teams": {
+                        "blue": get_team_reading_from_data(blue_name, self._team_profiles),
+                        "yellow": get_team_reading_from_data(yellow_name, self._team_profiles),
+                    },
+                }
+                startup_msg = json.dumps(startup_dict, ensure_ascii=False)
+                turn_id = self._ai_logger.start_turn(
+                    trigger_type="startup",
+                    priority=1,
+                    payload=startup_dict,
+                )
+                self._previous_turn_id = self._current_turn_id
+                self._current_turn_id = turn_id
+                await self._gemini_client.set_thinking_level(ThinkingLevel.MEDIUM)
+                await self._gemini_client.send_text(startup_msg)
         else:
             logger.warning("Failed to connect to Gemini API")
 
@@ -494,7 +513,7 @@ class CommentaryApp:
         try:
             with SSLLogReader(self._replay_log) as reader:
                 async for pkt in reader.iter_timed_packets(
-                    speed=self._replay_speed, loop=self._replay_loop
+                    speed=1.0, loop=self._replay_loop
                 ):
                     if not self._running:
                         break
@@ -513,6 +532,10 @@ class CommentaryApp:
                             self._on_vision_geometry(wrapper.geometry)
 
             logger.info("Log replay finished")
+            if self._replay_exit_on_finish and not self._replay_loop:
+                logger.info("Replay exit-on-finish requested; waiting 5s for active commentary then shutting down...")
+                await asyncio.sleep(5.0)
+                self._running = False
         except asyncio.CancelledError:
             logger.info("Log replay cancelled")
         except Exception as e:
@@ -521,7 +544,6 @@ class CommentaryApp:
     def start_replay(
         self,
         log_path: Optional[str] = None,
-        speed: float = 1.0,
         loop: bool = False,
     ) -> bool:
         """Start log replay dynamically from UI or API (defaults to sample match log)."""
@@ -539,7 +561,6 @@ class CommentaryApp:
             return False
 
         self._replay_log = str(path_obj)
-        self._replay_speed = speed
         self._replay_loop = loop
         try:
             loop = asyncio.get_running_loop()
@@ -551,7 +572,7 @@ class CommentaryApp:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
             self._replay_task = loop.create_task(self._run_replay_loop())
-        logger.info(f"Started dynamic replay: {self._replay_log} (speed={speed}x)")
+        logger.info(f"Started dynamic replay: {self._replay_log} (speed=1.0x)")
         return True
 
     def stop_replay(self) -> bool:
@@ -569,7 +590,7 @@ class CommentaryApp:
         return {
             "active": active,
             "log_path": self._replay_log if active else None,
-            "speed": self._replay_speed,
+            "speed": 1.0,
             "loop": self._replay_loop,
         }
 
@@ -742,18 +763,34 @@ class CommentaryApp:
         self._reader.set_mode(CommentaryMode.REFLEX)
         request = self._reader.generate_reflex(event.event_type, event_data)
 
+        # 直前リクエストとの短時間競合ガード（0.8秒以内）: 新イベントの優先度が直前以下ならスキップ
+        if (
+            current_time - self._last_request_time < 0.8
+            and request.priority <= self._last_request_priority
+        ):
+            logger.info(
+                f"Skipping {event.event_type} (rapid succession: prio {request.priority} <= last prio {self._last_request_priority})"
+            )
+            return
+
         if request.priority >= 1:
-            if self._gemini_client.is_generating and (
-                request.priority >= self._interrupt_priority_threshold
-                or prev_mode == CommentaryMode.ANALYST
-            ):
-                logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
-                discarded = self._clear_audio_output()
-                self._ai_logger.log_utterance_interrupted(
-                    self._current_turn_id,
-                    discarded,
-                    reason=f"barge_in_by_{event.event_type}",
-                )
+            if self._is_speaking:
+                if (
+                    request.priority >= self._interrupt_priority_threshold
+                    or prev_mode == CommentaryMode.ANALYST
+                ):
+                    logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
+                    discarded = self._clear_audio_output()
+                    self._ai_logger.log_utterance_interrupted(
+                        self._current_turn_id,
+                        discarded,
+                        reason=f"barge_in_by_{event.event_type}",
+                    )
+                else:
+                    logger.info(
+                        f"Skipping {event.event_type} (currently speaking, prio {request.priority} < threshold {self._interrupt_priority_threshold})"
+                    )
+                    return
 
             json_payload = self._reader.to_gemini_json(request)
             turn_id = self._ai_logger.start_turn(
@@ -762,7 +799,10 @@ class CommentaryApp:
                 priority=request.priority,
                 payload=json_payload,
             )
+            self._previous_turn_id = self._current_turn_id
             self._current_turn_id = turn_id
+            self._last_request_time = current_time
+            self._last_request_priority = request.priority
             logger.info(f"Sending reflex commentary for {event.event_type} (turn={turn_id})")
             asyncio.create_task(self._send_reflex(json_payload, request.priority))
             self._last_commentary_time[event.event_type] = current_time
@@ -777,6 +817,9 @@ class CommentaryApp:
             await asyncio.sleep(1.0)
 
             if not self._connected or not self._streaming:
+                continue
+
+            if self._is_speaking:
                 continue
 
             silence_duration = time.time() - self._last_event_time
@@ -867,11 +910,23 @@ class CommentaryApp:
         """Called when Gemini Live API signals output speech was interrupted."""
         logger.info("Gemini server interrupted output speech")
         discarded = self._clear_audio_output()
-        self._ai_logger.log_utterance_interrupted(
-            self._current_turn_id,
-            discarded,
-            reason="server_interrupted",
-        )
+        target_turn_id = self._current_turn_id
+        if self._current_turn_id:
+            curr = self._ai_logger.get_turn(self._current_turn_id)
+            if (
+                curr
+                and curr.first_audio_at is None
+                and curr.audio_total_bytes == 0
+                and self._previous_turn_id
+            ):
+                target_turn_id = self._previous_turn_id
+
+        if target_turn_id:
+            self._ai_logger.log_utterance_interrupted(
+                target_turn_id,
+                discarded,
+                reason="server_interrupted",
+            )
 
     def _on_tool_call_start(
         self, call_id: str, name: str, args: Dict[str, Any]

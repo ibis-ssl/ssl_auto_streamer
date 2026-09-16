@@ -230,3 +230,41 @@ def test_tracker_frames_edge_cases_fixture() -> None:
             n_yellow = detector._find_nearest_robot(frame, (ball.pos.x, ball.pos.y), "yellow")
             assert n_blue is None
             assert n_yellow is None
+
+
+def test_scenario_7_counter_attack_goal() -> None:
+    """Scenario 7: Full 42s Counter Attack, Save & Rebound Goal."""
+    log_path = SCENARIOS_DIR / "scenario_7_counter_attack_goal.log.gz"
+    assert log_path.exists()
+    writer, detector, events, counts = _replay_scenario(log_path)
+
+    # Check key game events in progression
+    assert "KICKOFF" in counts
+    assert "INPLAY_START" in counts
+    assert "PASS" in counts
+    assert "SHOT" in counts
+    assert "POSSIBLE_GOAL" in counts
+    assert "GOAL" in counts
+
+    # Check that score in WorldModelWriter is updated to Blue 1, Yellow 0
+    state = writer.get_game_state_data()
+    assert state["score"]["blue"] == 1
+    assert state["score"]["yellow"] == 0
+
+
+def test_scenario_8_tactical_foul_and_card() -> None:
+    """Scenario 8: Full 40s Violent Collision, Card, Free Kick & Placement."""
+    log_path = SCENARIOS_DIR / "scenario_8_tactical_foul_and_card.log.gz"
+    assert log_path.exists()
+    writer, detector, events, counts = _replay_scenario(log_path)
+
+    # Check events
+    assert "INPLAY_START" in counts
+    assert "COLLISION" in counts
+    assert "FREE_KICK" in counts
+    assert "BALL_OUT" in counts
+    assert "BALL_PLACEMENT" in counts
+
+    # Check cards
+    cards_fouls = writer.get_team_cards_and_fouls_data()
+    assert cards_fouls["blue"]["yellow_cards"] == 1

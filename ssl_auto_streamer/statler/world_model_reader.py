@@ -46,8 +46,8 @@ class WorldModelReader:
         self._reflex_templates = {
             "GOAL": {
                 "hint": "得点です。",
-                "instruction": "得点したチーム名とロボットID、更新後のスコアを簡潔に伝える。可能であればシュートの速度や距離も数値で補足する。",
-                "suggested_function": "get_highlight_details",
+                "instruction": "得点したチーム名とロボットID、更新後のスコアを1〜2文で簡潔に伝える。詳細な振り返りは直後の解説で行うため端的に完結させる。",
+                "suggested_function": None,
             },
             "POSSIBLE_GOAL": {
                 "hint": "ゴール判定中（審議中）です。",
@@ -101,8 +101,18 @@ class WorldModelReader:
             },
             "BALL_PLACEMENT": {
                 "hint": "ボールプレイスメントです。",
-                "instruction": "ボールプレイスメントを行うチームと、指定位置があれば座標を短く伝える。",
+                "instruction": "ボールプレイスメントを行うチームを伝える。指定位置がある場合は『センターサークル付近』『自陣・敵陣』などの大まかな位置を自然に伝え、数値の座標（XやY）は直接読み上げないこと。",
                 "suggested_function": "get_game_state",
+            },
+            "YELLOW_CARD": {
+                "hint": "イエローカードです。",
+                "instruction": "警告（イエローカード）が出されたチームを明確に伝える。一時退場や数的不利について短く触れる。",
+                "suggested_function": "get_team_cards_and_fouls",
+            },
+            "RED_CARD": {
+                "hint": "レッドカードです。",
+                "instruction": "退場（レッドカード）が出されたチームを明確に伝える。今後の数的不利について短く触れる。",
+                "suggested_function": "get_team_cards_and_fouls",
             },
             "BALL_PLACEMENT_SUCCEEDED": {
                 "hint": "ボールプレイスメント成功です。",
@@ -198,6 +208,7 @@ class WorldModelReader:
             "GOAL", "POSSIBLE_GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY",
             "FREE_KICK", "BALL_PLACEMENT", "BALL_PLACEMENT_FAILED",
             "INVALID_GOAL", "PENALTY_KICK_FAILED", "EMERGENCY_STOP",
+            "YELLOW_CARD", "RED_CARD",
         ]:
             priority = 2
         elif event_type in ["BALL_OUT"]:

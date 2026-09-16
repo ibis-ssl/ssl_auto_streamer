@@ -77,10 +77,13 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
 
     if getattr(args, "replay_log", None):
         config["ssl"]["replay_log"] = str(args.replay_log)
-    if getattr(args, "replay_speed", None) is not None:
-        config["ssl"]["replay_speed"] = args.replay_speed
     if getattr(args, "replay_loop", False):
         config["ssl"]["replay_loop"] = args.replay_loop
+    if getattr(args, "exit_on_replay_finish", False):
+        config["ssl"]["replay_exit_on_finish"] = args.exit_on_replay_finish
+
+    if getattr(args, "auto_start", False):
+        config["commentary"]["auto_start"] = True
 
     audio_output_mode_arg = getattr(args, "audio_output_mode", None)
     if audio_output_mode_arg:
@@ -174,15 +177,19 @@ def main() -> None:
         help="Path to SSL log file (.log or .log.gz) to replay instead of receiving live UDP",
     )
     parser.add_argument(
-        "--replay-speed",
-        type=float,
-        default=1.0,
-        help="Replay playback speed multiplier (default: 1.0, 0 for no delay)",
-    )
-    parser.add_argument(
         "--replay-loop",
         action="store_true",
         help="Loop log replay indefinitely",
+    )
+    parser.add_argument(
+        "--auto-start",
+        action="store_true",
+        help="Automatically start commentary streaming upon app launch",
+    )
+    parser.add_argument(
+        "--exit-on-replay-finish",
+        action="store_true",
+        help="Automatically shut down application when log replay finishes",
     )
     parser.add_argument(
         "--audio-output-mode",
