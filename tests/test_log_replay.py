@@ -8,8 +8,10 @@
 
 import asyncio
 import gzip
-import struct
 from pathlib import Path
+import struct
+
+import pytest
 
 from ssl_auto_streamer.event_detector import EventDetector
 from ssl_auto_streamer.ssl.log_reader import (
@@ -209,4 +211,57 @@ def test_app_dynamic_replay_control() -> None:
     assert success_legacy is True
     assert app.get_replay_status()["active"] is True
     assert app.stop_replay() is True
+
+
+def test_get_available_scenarios() -> None:
+    """Test CommentaryApp.get_available_scenarios lists available replay scenarios."""
+    from ssl_auto_streamer.app import CommentaryApp
+
+    config = {
+        "ssl": {},
+        "gemini": {"api_key": "test_dummy_key"},
+        "web": {"enabled": False},
+        "analysis_agent": {"enabled": False},
+    }
+    app = CommentaryApp(config)
+    scenarios = app.get_available_scenarios()
+    assert len(scenarios) >= 8
+
+    # Ensure sample match and scenarios 7 & 8 are present
+    ids = [s["id"] for s in scenarios]
+    assert "sample_match" in ids
+    assert "scenario_7_counter_attack_goal" in ids
+    assert "scenario_8_tactical_foul_and_card" in ids
+
+    # All scenarios have required keys and point to existing files
+    for sc in scenarios:
+        assert "id" in sc
+        assert "name" in sc
+        assert "path" in sc
+        assert Path(sc["path"]).exists()
+
+
+def test_web_server_replay_scenarios_endpoint() -> None:
+    """Test WebServer._handle_replay_scenarios returns scenario list."""
+    import json
+    from unittest.mock import MagicMock
+    from ssl_auto_streamer.web.server import WebServer
+
+    server = WebServer(
+        host="127.0.0.1",
+        port=0,
+        writer=MagicMock(),
+        gemini_client=MagicMock(),
+        config={},
+        config_dir=Path("/tmp"),
+        get_replay_scenarios=lambda: [{"id": "test_sc", "name": "テストシナリオ"}],
+    )
+    req = MagicMock()
+    resp = asyncio.run(server._handle_replay_scenarios(req))
+    data = json.loads(resp.body)
+    assert "scenarios" in data
+    assert len(data["scenarios"]) == 1
+    assert data["scenarios"][0]["id"] == "test_sc"
+
+
 

@@ -12,7 +12,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ssl_auto_streamer.data import (
     generate_initial_context,
@@ -228,6 +228,7 @@ class CommentaryApp:
                 on_start_replay=self.start_replay,
                 on_stop_replay=self.stop_replay,
                 get_replay_status=self.get_replay_status,
+                get_replay_scenarios=self.get_available_scenarios,
                 on_run_pytest=self.run_pytest_suite,
                 ai_logger=self._ai_logger,
             )
@@ -608,6 +609,99 @@ class CommentaryApp:
             "speed": 1.0,
             "loop": self._replay_loop,
         }
+
+    def get_available_scenarios(self) -> List[Dict[str, Any]]:
+        """Return list of available scenario logs for replay."""
+        scenarios_dir = Path(__file__).parent.parent / "tests" / "data" / "scenarios"
+        sample_log = Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
+
+        metadata_map = {
+            "scenario_8_tactical_foul_and_card.log.gz": {
+                "name": "シナリオ8: 危険な衝突・イエローカード・直接FK (40秒)",
+                "category": "長尺マッチ",
+                "description": "激しい衝突タックル、STOP、イエローカード提示、戦術解説、直接FK、ボールアウト、ボールプレイスメント",
+                "recommended": True,
+            },
+            "scenario_7_counter_attack_goal.log.gz": {
+                "name": "シナリオ7: カウンター速攻・リバウンドゴール・VAR (42秒)",
+                "category": "長尺マッチ",
+                "description": "キックオフ、パス連携、インターセプト、高速カウンター、シュート、セーブ、リバウンドゴール、判定審議、ゴール確定",
+                "recommended": True,
+            },
+            "sample_match.log.gz": {
+                "name": "サンプルマッチ: フルゲーム攻防 (65秒)",
+                "category": "長尺マッチ",
+                "description": "試合開始から複数回の攻防、シュート、STOP、解説モード遷移を含む総合マッチログ",
+                "recommended": True,
+            },
+            "scenario_1_goal.log.gz": {
+                "name": "シナリオ1: シュート・ゴール (10秒)",
+                "category": "基本シナリオ",
+                "description": "パスから高速シュート、ゴール判定まで",
+                "recommended": False,
+            },
+            "scenario_2_foul_card.log.gz": {
+                "name": "シナリオ2: 衝突ファール・STOP (8秒)",
+                "category": "基本シナリオ",
+                "description": "ロボット同士の衝突とSTOP判定",
+                "recommended": False,
+            },
+            "scenario_3_pass_chain.log.gz": {
+                "name": "シナリオ3: 連続パス展開 (8秒)",
+                "category": "基本シナリオ",
+                "description": "複数ロボット間でのパス連携",
+                "recommended": False,
+            },
+            "scenario_4_penalty_save.log.gz": {
+                "name": "シナリオ4: ペナルティキック・GKセーブ (8秒)",
+                "category": "基本シナリオ",
+                "description": "PK準備からキック、GKによるファインセーブ",
+                "recommended": False,
+            },
+            "scenario_5_ball_out.log.gz": {
+                "name": "シナリオ5: タッチラインボールアウト (10秒)",
+                "category": "基本シナリオ",
+                "description": "ドリブルからラインアウト、STOP判定",
+                "recommended": False,
+            },
+            "scenario_6_minimal_smoke.log.gz": {
+                "name": "シナリオ6: 最小スモークテスト (1秒)",
+                "category": "基本シナリオ",
+                "description": "1パケットのみの最小疎通テスト",
+                "recommended": False,
+            },
+        }
+
+        results: List[Dict[str, Any]] = []
+
+        if sample_log.exists():
+            meta = metadata_map.get(sample_log.name, {})
+            results.append({
+                "id": "sample_match",
+                "filename": sample_log.name,
+                "path": str(sample_log),
+                "name": meta.get("name", sample_log.name),
+                "category": meta.get("category", "長尺マッチ"),
+                "description": meta.get("description", ""),
+                "recommended": meta.get("recommended", True),
+            })
+
+        if scenarios_dir.exists():
+            for p in sorted(scenarios_dir.glob("*.log.gz")):
+                meta = metadata_map.get(p.name, {})
+                results.append({
+                    "id": p.stem.replace(".log", ""),
+                    "filename": p.name,
+                    "path": str(p),
+                    "name": meta.get("name", p.name),
+                    "category": meta.get("category", "基本シナリオ"),
+                    "description": meta.get("description", ""),
+                    "recommended": meta.get("recommended", False),
+                })
+
+        # Recommended first, then by category (長尺マッチ first), then by name
+        results.sort(key=lambda x: (not x.get("recommended", False), x.get("category") != "長尺マッチ", x.get("name", "")))
+        return results
 
     async def run_pytest_suite(self) -> Dict[str, Any]:
         """Run pytest test suite in background and return output summary."""

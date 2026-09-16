@@ -276,6 +276,43 @@ main {
   gap: 8px;
 }
 
+.test-scenario-select {
+  background: var(--md-sys-color-surface-container, #1e2638);
+  color: var(--md-sys-color-on-surface, #e2e8f0);
+  border: 1px solid var(--md-sys-color-outline-variant, #334155);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  max-width: 240px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.test-scenario-select:focus {
+  border-color: var(--md-sys-color-primary, #60a5fa);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.2);
+}
+
+.test-scenario-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.test-scenario-select optgroup {
+  background: var(--md-sys-color-surface-container-high, #1a2234);
+  color: var(--md-sys-color-primary, #93c5fd);
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.test-scenario-select option {
+  background: var(--md-sys-color-surface-container, #1e2638);
+  color: var(--md-sys-color-on-surface, #e2e8f0);
+  font-size: 12px;
+  padding: 4px;
+}
+
 #test-replay-btn {
   padding-left: 12px;
   padding-right: 14px;

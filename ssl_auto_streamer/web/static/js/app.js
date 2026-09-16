@@ -71,16 +71,22 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Auto test / Replay control
+  initScenarioSelector();
   const testReplayBtn = document.getElementById('test-replay-btn');
+  const scenarioSelect = document.getElementById('test-scenario-select');
   if (testReplayBtn) {
     testReplayBtn.addEventListener('click', async () => {
       testReplayBtn.disabled = true;
       try {
         const endpoint = replayActive ? '/api/replay/stop' : '/api/replay/start';
+        const payload = replayActive ? {} : {
+          log_path: scenarioSelect ? scenarioSelect.value : undefined,
+          loop: false,
+        };
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ loop: false }),
+          body: JSON.stringify(payload),
         });
         const data = await res.json();
         if (!data.success) {
@@ -359,6 +365,63 @@ function updateStreamingControl(status) {
   }
 }
 
+let availableScenarios = [];
+
+async function initScenarioSelector() {
+  const select = document.getElementById('test-scenario-select');
+  if (!select) return;
+
+  try {
+    const res = await fetch('/api/replay/scenarios');
+    const data = await res.json();
+    availableScenarios = data.scenarios || [];
+
+    if (availableScenarios.length === 0) {
+      select.innerHTML = '<option value="" disabled>利用可能なシナリオがありません</option>';
+      return;
+    }
+
+    select.innerHTML = '';
+    const categories = {};
+    for (const sc of availableScenarios) {
+      const cat = sc.category || 'その他';
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(sc);
+    }
+
+    const savedScenario = localStorage.getItem('ssl_selected_scenario');
+    let matchedSaved = false;
+
+    for (const [cat, items] of Object.entries(categories)) {
+      const optgroup = document.createElement('optgroup');
+      optgroup.label = cat;
+      for (const sc of items) {
+        const opt = document.createElement('option');
+        opt.value = sc.path;
+        opt.textContent = sc.name;
+        opt.title = sc.description || '';
+        if (savedScenario && (sc.path === savedScenario || sc.id === savedScenario)) {
+          opt.selected = true;
+          matchedSaved = true;
+        }
+        optgroup.appendChild(opt);
+      }
+      select.appendChild(optgroup);
+    }
+
+    if (!matchedSaved && select.options.length > 0) {
+      select.selectedIndex = 0;
+    }
+
+    select.addEventListener('change', () => {
+      localStorage.setItem('ssl_selected_scenario', select.value);
+    });
+  } catch (e) {
+    console.error('Failed to load scenarios:', e);
+    select.innerHTML = '<option value="" disabled>シナリオ取得失敗</option>';
+  }
+}
+
 function updateReplayControl(status) {
   if (!status) return;
   const replay = status.replay || {};
@@ -366,7 +429,21 @@ function updateReplayControl(status) {
   const btn = document.getElementById('test-replay-btn');
   const label = document.getElementById('test-replay-label');
   const statusEl = document.getElementById('test-replay-status');
+  const select = document.getElementById('test-scenario-select');
   if (!btn || !label || !statusEl) return;
+
+  if (select) {
+    select.disabled = active;
+    if (active && replay.log_path) {
+      // Sync selector option with currently active log
+      for (let i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === replay.log_path) {
+          select.selectedIndex = i;
+          break;
+        }
+      }
+    }
+  }
 
   if (active === replayActive && label.textContent) return;
   replayActive = active;
@@ -374,12 +451,11 @@ function updateReplayControl(status) {
   if (active) {
     btn.classList.add('active');
     label.textContent = '⏹ テスト停止';
-    const speed = replay.speed ? `${replay.speed}x` : '再生中';
-    statusEl.textContent = `再生中 (${speed})`;
+    statusEl.textContent = '再生中';
     statusEl.className = 'test-replay-status active';
   } else {
     btn.classList.remove('active');
-    label.textContent = '自動テスト再生';
+    label.textContent = 'テスト再生';
     statusEl.textContent = '停止中';
     statusEl.className = 'test-replay-status';
   }

@@ -60,6 +60,7 @@ class WebServer:
         on_start_replay: Optional[Callable[..., bool]] = None,
         on_stop_replay: Optional[Callable[[], bool]] = None,
         get_replay_status: Optional[Callable[[], Dict[str, Any]]] = None,
+        get_replay_scenarios: Optional[Callable[[], List[Dict[str, Any]]]] = None,
         on_run_pytest: Optional[Callable[[], Any]] = None,
         ai_logger: Optional[Any] = None,
     ):
@@ -80,6 +81,7 @@ class WebServer:
         self._on_start_replay = on_start_replay
         self._on_stop_replay = on_stop_replay
         self._get_replay_status = get_replay_status
+        self._get_replay_scenarios = get_replay_scenarios
         self._on_run_pytest = on_run_pytest
         self._ai_logger = ai_logger
 
@@ -116,6 +118,7 @@ class WebServer:
         self._app.router.add_post("/api/replay/start", self._handle_replay_start)
         self._app.router.add_post("/api/replay/stop", self._handle_replay_stop)
         self._app.router.add_get("/api/replay/status", self._handle_replay_status)
+        self._app.router.add_get("/api/replay/scenarios", self._handle_replay_scenarios)
         self._app.router.add_post("/api/test/run", self._handle_test_run)
         if self._static_dir.exists():
             self._app.router.add_static("/static", self._static_dir)
@@ -622,3 +625,11 @@ class WebServer:
             return web.json_response({"error": "Test runner not configured"}, status=501)
         res = await self._on_run_pytest()
         return web.json_response(res)
+
+    async def _handle_replay_scenarios(self, request: web.Request) -> web.Response:
+        """Get list of available replay scenarios."""
+        if not self._get_replay_scenarios:
+            return web.json_response({"scenarios": []})
+        scenarios = self._get_replay_scenarios()
+        return web.json_response({"scenarios": scenarios})
+

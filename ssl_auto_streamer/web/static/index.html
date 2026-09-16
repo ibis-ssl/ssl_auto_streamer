@@ -46,9 +46,13 @@
           <span id="client-audio-status" class="client-audio-status">無効</span>
         </div>
         <div id="test-replay-section" class="test-replay-section">
-          <button id="test-replay-btn" class="btn btn-secondary btn-sm" title="テスト用試合ログを自動再生/停止します">
+          <label for="test-scenario-select" class="sr-only">テストシナリオ</label>
+          <select id="test-scenario-select" class="test-scenario-select" title="テスト再生するシナリオログを選択">
+            <option value="" disabled selected>シナリオ読込中...</option>
+          </select>
+          <button id="test-replay-btn" class="btn btn-secondary btn-sm" title="選択したテストシナリオを自動再生/停止します">
             <span class="material-symbols-rounded">science</span>
-            <span id="test-replay-label">自動テスト再生</span>
+            <span id="test-replay-label">テスト再生</span>
           </button>
           <span id="test-replay-status" class="test-replay-status">停止中</span>
         </div>
