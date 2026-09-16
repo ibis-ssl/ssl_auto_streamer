@@ -76,6 +76,7 @@ class WebServer:
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._audio_output_clients: Set[web.WebSocketResponse] = set()
         self._commentary_history: Deque[Dict[str, Any]] = deque(maxlen=10)
+        self._thought_history: Deque[Dict[str, Any]] = deque(maxlen=20)
         self._event_log: Deque[Dict[str, Any]] = deque(maxlen=20)
         self._tracker_last_seen: float = 0.0
         self._gc_last_seen: float = 0.0
@@ -145,6 +146,14 @@ class WebServer:
         """Push output audio transcription to connected clients."""
         self._fire_and_forget(self._broadcast(
             json.dumps({"type": "transcription", "text": text, "timestamp": time.time()}, ensure_ascii=False)
+        ))
+
+    def push_thought(self, text: str) -> None:
+        """Push AI thinking process (reasoning) to connected clients."""
+        entry = {"text": text, "timestamp": time.time()}
+        self._thought_history.append(entry)
+        self._fire_and_forget(self._broadcast(
+            json.dumps({"type": "thought", **entry}, ensure_ascii=False)
         ))
 
     def build_audio_chunk_message(
@@ -290,6 +299,7 @@ class WebServer:
             "cards": cards,
             "status": self._build_status_dict(),
             "commentary_history": list(self._commentary_history),
+            "thought_history": list(self._thought_history),
             "event_log": list(self._event_log),
             "team_info": team_info,
         }

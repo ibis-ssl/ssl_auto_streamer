@@ -116,6 +116,14 @@
           </div>
         </div>
 
+        <!-- AI Reasoning -->
+        <div class="panel" id="thought-panel">
+          <div class="panel-header">AI 思考プロセス (Reasoning)</div>
+          <div class="panel-body">
+            <div id="thought-text" class="thought-text"></div>
+          </div>
+        </div>
+
         <!-- Game State -->
         <div class="panel" id="game-state-panel">
           <div class="panel-header">ゲーム状態</div>
@@ -274,8 +282,20 @@
       <div class="settings-section">
         <div class="panel-header">Gemini 設定 (要再起動)</div>
         <div class="form-group">
-          <label for="cfg-gemini-model">モデル</label>
-          <input type="text" id="cfg-gemini-model" placeholder="gemini-2.0-flash-exp">
+          <label for="cfg-gemini-model">実況Liveモデル</label>
+          <input type="text" id="cfg-gemini-model" list="gemini-models-list" placeholder="gemini-3.8-live">
+          <datalist id="gemini-models-list">
+            <option value="gemini-3.8-live">超低遅延 音声実況</option>
+            <option value="gemini-3.8-live-extended-thinking">拡張思考 音声実況</option>
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label for="cfg-analysis-model">解析モデル (AnalysisAgent)</label>
+          <input type="text" id="cfg-analysis-model" list="analysis-models-list" placeholder="gemini-3.5-flash-lite">
+          <datalist id="analysis-models-list">
+            <option value="gemini-3.5-flash-lite">350 tok/s 超高速解析</option>
+            <option value="gemini-3.8-flash">高度推論 汎用モデル</option>
+          </datalist>
         </div>
         <div class="form-group">
           <label for="cfg-api-key">API キー (変更時のみ入力)</label>

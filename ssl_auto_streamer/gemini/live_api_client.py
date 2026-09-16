@@ -38,18 +38,33 @@ class ThinkingLevel(str, Enum):
     HIGH = "high"
 
 
+def normalize_live_model_name(name: Optional[str]) -> str:
+    """Normalize user or config model strings to canonical Live API model names."""
+    if not name:
+        return "gemini-3.8-live"
+    cleaned = name.strip().lower().replace(" ", "-")
+    if cleaned in ("gemini-3.8-flash-live", "gemini-3.8-flash-live-preview", "gemini-3.8-live-preview"):
+        return "gemini-3.8-live"
+    if "3.8" in cleaned and "thinking" in cleaned:
+        return "gemini-3.8-live-extended-thinking"
+    if "3.8" in cleaned and ("live" in cleaned or "flash" in cleaned):
+        return "gemini-3.8-live"
+    return name.strip()
+
+
 @dataclass
 class GeminiConfig:
     """Configuration for Gemini Live API."""
 
     api_key: str = ""
-    model: str = "gemini-3.1-flash-live-preview"
+    model: str = "gemini-3.8-live"
     sample_rate: int = 24000
     voice: str = "Aoede"
     system_instruction: str = ""
     tools_config: List[Dict[str, Any]] = field(default_factory=list)
     thinking_level: str = "medium"  # minimal / low / medium / high
     output_transcription: bool = True
+    language_code: str = "ja-JP"
     response_mode: str = "text"  # "text" (local TTS) or "audio" (Gemini native)
 
 
@@ -78,7 +93,9 @@ class GeminiLiveApiClient:
         self._on_disconnect_callback: Optional[Callable[[], None]] = None
         self._turn_complete_callback: Optional[Callable[[], None]] = None
         self._transcription_callback: Optional[Callable[[str], None]] = None
+        self._thought_callback: Optional[Callable[[str], None]] = None
         self._session_start_time: float = 0.0
+        self._running_tool_tasks: set = set()
 
         self._ws_url = (
             f"wss://generativelanguage.googleapis.com/ws/"
@@ -94,6 +111,9 @@ class GeminiLiveApiClient:
 
     def set_transcription_callback(self, callback: Callable[[str], None]) -> None:
         self._transcription_callback = callback
+
+    def set_thought_callback(self, callback: Callable[[str], None]) -> None:
+        self._thought_callback = callback
 
     @property
     def session_age(self) -> float:
@@ -129,6 +149,8 @@ class GeminiLiveApiClient:
         try:
             self._ws = await websockets.connect(self._ws_url)
 
+            canonical_model = normalize_live_model_name(self._config.model)
+
             if self._config.response_mode == "audio":
                 generation_config: Dict[str, Any] = {
                     "response_modalities": ["AUDIO"],
@@ -139,10 +161,12 @@ class GeminiLiveApiClient:
                             }
                         }
                     },
-                    "thinking_config": {
-                        "thinkingLevel": self._config.thinking_level,
-                    },
                 }
+                # thinkingLevel は extended-thinking または旧モデルのみ指定
+                if "extended-thinking" in canonical_model or ("3.8" not in canonical_model and self._config.thinking_level):
+                    generation_config["thinking_config"] = {
+                        "thinkingLevel": self._config.thinking_level,
+                    }
             else:
                 generation_config = {
                     "response_modalities": ["TEXT"],
@@ -150,13 +174,18 @@ class GeminiLiveApiClient:
 
             setup_msg = {
                 "setup": {
-                    "model": f"models/{self._config.model}",
+                    "model": f"models/{canonical_model}",
                     "generation_config": generation_config,
                     "system_instruction": {
                         "parts": [{"text": self._config.system_instruction}]
                     },
                 }
             }
+
+            if self._config.output_transcription:
+                setup_msg["setup"]["output_audio_transcription"] = {
+                    "language_codes": [self._config.language_code]
+                }
 
             if self._config.tools_config:
                 setup_msg["setup"]["tools"] = [
@@ -192,9 +221,16 @@ class GeminiLiveApiClient:
                 await self._receive_task
             except asyncio.CancelledError:
                 pass
+            self._receive_task = None
+
+        for task in list(self._running_tool_tasks):
+            if not task.done():
+                task.cancel()
+        self._running_tool_tasks.clear()
 
         if self._ws:
             await self._ws.close()
+            self._ws = None
 
         self._connected = False
         self._is_generating = False
@@ -315,17 +351,27 @@ class GeminiLiveApiClient:
                                     self._audio_callback(audio_bytes)
                         if "text" in part:
                             text = part["text"]
-                            if text and self._text_callback:
-                                logger.debug(f"Received text: {text!r}")
-                                self._text_callback(text)
+                            is_thought = part.get("thought") is True or "thought" in part
+                            if is_thought:
+                                if text and self._thought_callback:
+                                    logger.debug(f"Received thought: {text!r}")
+                                    self._thought_callback(text)
+                            else:
+                                if text and self._text_callback:
+                                    logger.debug(f"Received text: {text!r}")
+                                    self._text_callback(text)
 
-            # 出力音声の文字起こし (gemini-3.1以降)
+            # 出力音声の文字起こし
             if "outputTranscription" in server_content:
                 transcription = server_content["outputTranscription"]
                 text = transcription.get("text", "")
                 if text and self._transcription_callback:
                     logger.debug(f"Transcription: {text}")
                     self._transcription_callback(text)
+
+            if server_content.get("interrupted"):
+                logger.info("Model speech interrupted")
+                self._is_generating = False
 
             if server_content.get("turnComplete"):
                 logger.debug("Turn complete")
@@ -348,14 +394,18 @@ class GeminiLiveApiClient:
         logger.info(f"Function call: {fc_name}({fc_args})")
 
         if self._function_call_handler:
-            asyncio.create_task(self._execute_function_call(fc_id, fc_name, fc_args))
+            task = asyncio.create_task(self._execute_function_call(fc_id, fc_name, fc_args))
+            self._running_tool_tasks.add(task)
+            task.add_done_callback(self._running_tool_tasks.discard)
         else:
             logger.warning(f"No handler for function call: {fc_name}")
-            asyncio.create_task(
+            task = asyncio.create_task(
                 self._send_function_response(
                     fc_id, fc_name, {"error": "No function handler registered"}
                 )
             )
+            self._running_tool_tasks.add(task)
+            task.add_done_callback(self._running_tool_tasks.discard)
 
     async def _execute_function_call(
         self, fc_id: str, fc_name: str, fc_args: Dict[str, Any]

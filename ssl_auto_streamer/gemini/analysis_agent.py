@@ -73,11 +73,11 @@ class AnalysisAgent:
     ):
         self._writer = writer
         self._enabled = config.get("enabled", True)
-        self._model = config.get("model", "gemini-3-flash-preview")
+        self._model = config.get("model", "gemini-3.5-flash-lite")
         self._api_key = config.get("api_key", "")
         self._temperature = config.get("temperature", 0.7)
         self._max_tokens = config.get("max_output_tokens", 512)
-        self._timeout = config.get("timeout_seconds", 8)
+        self._timeout = config.get("timeout_seconds", 5)
         self._max_tool_iterations = config.get("max_tool_iterations", 3)
         self._tool_declarations = tool_declarations or []
         self._tool_executor = tool_executor

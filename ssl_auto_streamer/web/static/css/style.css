@@ -1125,6 +1125,26 @@ select option {
   word-break: break-word;
 }
 
+/* ===== Reasoning / AI Thought ===== */
+.thought-text {
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.5;
+  min-height: 2em;
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container-low);
+  padding: 8px 12px;
+  border-left: 3px solid var(--md-sys-color-primary);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.thought-text:empty::before {
+  content: "（AI思考待機中）";
+  color: var(--md-sys-color-outline);
+  font-style: normal;
+}
+
 /* ===== M3 Switch ===== */
 .switch {
   position: relative;

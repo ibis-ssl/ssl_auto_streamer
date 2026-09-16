@@ -270,6 +270,8 @@ function handleMessage(msg) {
     appendCommentary(msg);
   } else if (msg.type === 'transcription') {
     updateTranscription(msg.text);
+  } else if (msg.type === 'thought') {
+    updateThought(msg.text);
   } else if (msg.type === 'output_audio') {
     audioOutputPlayer.enqueue(msg);
   } else if (msg.type === 'output_audio_control') {
@@ -542,6 +544,26 @@ function updateTranscription(text) {
       if (banner2) banner2.classList.add('hidden');
       _lastSpeakingText = '';
     }, 8000);
+  }
+}
+
+let _thoughtClearTimer = null;
+function updateThought(text) {
+  const el = document.getElementById('thought-text');
+  if (!el) return;
+  if (text) {
+    el.textContent = text;
+    el.classList.add('active');
+  }
+  if (_thoughtClearTimer) clearTimeout(_thoughtClearTimer);
+  if (text) {
+    _thoughtClearTimer = setTimeout(() => {
+      const el2 = document.getElementById('thought-text');
+      if (el2) {
+        el2.textContent = '';
+        el2.classList.remove('active');
+      }
+    }, 12000);
   }
 }
 

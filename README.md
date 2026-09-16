@@ -112,8 +112,14 @@ docker run \
 ```yaml
 gemini:
   api_key: ''              # 空文字の場合は GEMINI_API_KEY 環境変数から取得
-  model: gemini-2.5-flash-native-audio-preview-12-2025
+  model: gemini-3.8-live   # 音声実況用 超低遅延Liveモデル
+  output_transcription: true
   sample_rate: 24000       # 音声サンプルレート (Hz)
+
+analysis_agent:
+  enabled: true
+  model: gemini-3.5-flash-lite  # 試合分析用 超高速モデル (350 tok/s)
+  timeout_seconds: 5
 
 ssl:
   tracker_addr: 224.5.23.2

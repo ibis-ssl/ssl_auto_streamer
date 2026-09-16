@@ -18,11 +18,13 @@ function populateForm(cfg) {
   const commentary = cfg.commentary || {};
   const gemini = cfg.gemini || {};
   const audio = cfg.audio || {};
+  const analysisAgent = cfg.analysis_agent || {};
 
   setVal('cfg-silence-threshold', commentary.analyst_silence_threshold || '');
   setVal('cfg-update-rate', commentary.writer_update_rate || '');
 
   setVal('cfg-gemini-model', gemini.model || '');
+  setVal('cfg-analysis-model', analysisAgent.model || '');
   setVal('cfg-audio-output-mode', audio.output_mode || 'server');
   setVal('cfg-audio-device', audio.device || '');
 }
@@ -45,6 +47,9 @@ async function applyConfig() {
     },
     gemini: {
       model: getVal('cfg-gemini-model'),
+    },
+    analysis_agent: {
+      model: getVal('cfg-analysis-model'),
     },
     audio: {
       output_mode: getVal('cfg-audio-output-mode') || 'server',

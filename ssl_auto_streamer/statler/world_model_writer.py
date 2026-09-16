@@ -628,6 +628,19 @@ class WorldModelWriter:
             ]
             return {"highlights": highlights_data, "total_available": len(filtered)}
 
+    def get_field_geometry_data(self) -> Dict[str, Any]:
+        """Return field dimensions and goal/penalty area geometry data."""
+        with self._lock:
+            return {
+                "field_length_m": round(self._field_length, 3),
+                "field_width_m": round(self._field_width, 3),
+                "goal_width_m": round(self._goal_width, 3),
+                "goal_depth_m": round(self._goal_depth, 3),
+                "penalty_area_depth_m": round(self._penalty_depth, 3),
+                "penalty_area_width_m": round(self._penalty_width, 3),
+                "boundary_width_m": 0.3,
+            }
+
     def get_field_snapshot_data(self) -> Dict[str, Any]:
         """Return ball and robot positions for field visualization."""
         with self._lock:

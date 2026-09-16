@@ -137,5 +137,43 @@
       },
       "required": []
     }
+  },
+  {
+    "name": "get_field_geometry",
+    "description": "フィールドの寸法やライン・ゴール等の幾何形状データを取得する。フィールド長、フィールド幅、ゴール幅、ゴール奥行き、ペナルティエリア幅・奥行きを含む。フィールドの広さやエリアの距離感を語る際に使用。",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "get_team_profile",
+    "description": "指定チームまたは両チームのプロファイル情報を取得する。正式名称、読み方、プレースタイル、戦術的特徴、キーロボット情報を含む。チームの戦術的背景や特徴を解説する際に使用。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "team": {
+          "type": "string",
+          "enum": ["blue", "yellow", "all"],
+          "description": "対象チーム（デフォルト: all）"
+        }
+      },
+      "required": []
+    }
+  },
+  {
+    "name": "get_ssl_rule",
+    "description": "RoboCup SSLの公式ルール定義を取得する。ファール規定（最大許容速度、接触、ダブルタッチなど）やセットプレー（ボールプレイスメント、フリーキック、キックオフなど）の具体的なルール・数値基準を確認する際に使用。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "rule_key": {
+          "type": "string",
+          "description": "ルールのキー名（省略した場合は主なルール一覧の概要を返却。例: 'robot_speed_limit', 'ball_placement', 'double_touch', 'bot_substitution' 等）"
+        }
+      },
+      "required": []
+    }
   }
 ]

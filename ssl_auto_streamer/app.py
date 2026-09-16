@@ -91,7 +91,11 @@ class CommentaryApp:
         # Initialize Statler components
         self._writer = WorldModelWriter()
         self._reader = WorldModelReader(self._writer)
-        self._function_handler = FunctionHandler(self._writer)
+        self._function_handler = FunctionHandler(
+            self._writer,
+            team_profiles=self._team_profiles,
+            ssl_rules=self._ssl_rules,
+        )
 
         # Initialize AnalysisAgent
         api_key_for_analysis = (
@@ -119,7 +123,7 @@ class CommentaryApp:
         api_key = gemini_cfg.get("api_key") or os.environ.get("GEMINI_API_KEY", "")
         gemini_config = GeminiConfig(
             api_key=api_key,
-            model=gemini_cfg.get("model", "gemini-3.1-flash-live-preview"),
+            model=gemini_cfg.get("model", "gemini-3.8-live"),
             sample_rate=gemini_cfg.get("sample_rate", 24000),
             system_instruction=system_instruction,
             tools_config=tools_config,
@@ -133,6 +137,7 @@ class CommentaryApp:
         self._gemini_client.set_disconnect_callback(self._on_gemini_disconnected)
         self._gemini_client.set_turn_complete_callback(self._on_turn_complete)
         self._gemini_client.set_transcription_callback(self._on_transcription_received)
+        self._gemini_client.set_thought_callback(self._on_thought_received)
 
         # Audio output
         self._audio_sample_rate = gemini_cfg.get("sample_rate", 24000)
@@ -683,6 +688,11 @@ class CommentaryApp:
         """Handle output audio transcription from Gemini."""
         if self._web_server:
             self._web_server.push_transcription(text)
+
+    def _on_thought_received(self, text: str) -> None:
+        """Handle reasoning/thought stream from Gemini."""
+        if self._web_server:
+            self._web_server.push_thought(text)
 
     def _on_turn_complete(self) -> None:
         """Handle end of Gemini turn."""

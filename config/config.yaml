@@ -1,9 +1,9 @@
 analysis_agent:
   enabled: true
   max_output_tokens: 512
-  model: gemini-3-flash-preview
+  model: gemini-3.5-flash-lite
   temperature: 0.7
-  timeout_seconds: 8
+  timeout_seconds: 5
 audio:
   device: ''
   output_mode: client
@@ -14,7 +14,7 @@ commentary:
   writer_update_rate: 1
 gemini:
   api_key: ''  # 環境変数 GEMINI_API_KEY を使用
-  model: gemini-3.1-flash-live-preview
+  model: gemini-3.8-live
   output_transcription: true
   sample_rate: 24000
   thinking_level: medium

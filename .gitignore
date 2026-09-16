@@ -20,3 +20,6 @@ build/
 
 # Large binary files
 models/
+
+# Logs
+logs/
