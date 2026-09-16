@@ -92,8 +92,15 @@ class GeminiLiveApiClient:
         self._receive_task: Optional[asyncio.Task] = None
         self._on_disconnect_callback: Optional[Callable[[], None]] = None
         self._turn_complete_callback: Optional[Callable[[], None]] = None
+        self._on_interrupted_callback: Optional[Callable[[], None]] = None
         self._transcription_callback: Optional[Callable[[str], None]] = None
         self._thought_callback: Optional[Callable[[str], None]] = None
+        self._tool_call_start_callback: Optional[
+            Callable[[str, str, Dict[str, Any]], None]
+        ] = None
+        self._tool_call_end_callback: Optional[
+            Callable[[str, str, Any, float, Optional[str]], None]
+        ] = None
         self._session_start_time: float = 0.0
         self._running_tool_tasks: set = set()
 
@@ -109,11 +116,22 @@ class GeminiLiveApiClient:
     def set_turn_complete_callback(self, callback: Callable[[], None]) -> None:
         self._turn_complete_callback = callback
 
+    def set_interrupted_callback(self, callback: Callable[[], None]) -> None:
+        self._on_interrupted_callback = callback
+
     def set_transcription_callback(self, callback: Callable[[str], None]) -> None:
         self._transcription_callback = callback
 
     def set_thought_callback(self, callback: Callable[[str], None]) -> None:
         self._thought_callback = callback
+
+    def set_tool_call_callbacks(
+        self,
+        start_callback: Optional[Callable[[str, str, Dict[str, Any]], None]] = None,
+        end_callback: Optional[Callable[[str, str, Any, float, Optional[str]], None]] = None,
+    ) -> None:
+        self._tool_call_start_callback = start_callback
+        self._tool_call_end_callback = end_callback
 
     @property
     def session_age(self) -> float:
@@ -372,6 +390,8 @@ class GeminiLiveApiClient:
             if server_content.get("interrupted"):
                 logger.info("Model speech interrupted")
                 self._is_generating = False
+                if self._on_interrupted_callback:
+                    self._on_interrupted_callback()
 
             if server_content.get("turnComplete"):
                 logger.debug("Turn complete")
@@ -393,15 +413,27 @@ class GeminiLiveApiClient:
 
         logger.info(f"Function call: {fc_name}({fc_args})")
 
+        if self._tool_call_start_callback:
+            try:
+                self._tool_call_start_callback(fc_id, fc_name, fc_args)
+            except Exception as ex:
+                logger.warning(f"Error in tool_call_start_callback: {ex}")
+
         if self._function_call_handler:
             task = asyncio.create_task(self._execute_function_call(fc_id, fc_name, fc_args))
             self._running_tool_tasks.add(task)
             task.add_done_callback(self._running_tool_tasks.discard)
         else:
             logger.warning(f"No handler for function call: {fc_name}")
+            err_msg = "No function handler registered"
+            if self._tool_call_end_callback:
+                try:
+                    self._tool_call_end_callback(fc_id, fc_name, {"error": err_msg}, 0.0, err_msg)
+                except Exception as ex:
+                    logger.warning(f"Error in tool_call_end_callback: {ex}")
             task = asyncio.create_task(
                 self._send_function_response(
-                    fc_id, fc_name, {"error": "No function handler registered"}
+                    fc_id, fc_name, {"error": err_msg}
                 )
             )
             self._running_tool_tasks.add(task)
@@ -411,14 +443,28 @@ class GeminiLiveApiClient:
         self, fc_id: str, fc_name: str, fc_args: Dict[str, Any]
     ) -> None:
         """非同期でファンクションコールを実行して結果を返送する。"""
+        start_time = time.perf_counter()
+        result = None
+        error_msg: Optional[str] = None
         try:
             result = self._function_call_handler(fc_name, fc_args)
             if inspect.isawaitable(result):
                 result = await result
             await self._send_function_response(fc_id, fc_name, result)
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Function call error: {fc_name} -> {e}")
-            await self._send_function_response(fc_id, fc_name, {"error": str(e)})
+            result = {"error": error_msg}
+            await self._send_function_response(fc_id, fc_name, result)
+        finally:
+            latency_ms = (time.perf_counter() - start_time) * 1000.0
+            if self._tool_call_end_callback:
+                try:
+                    self._tool_call_end_callback(
+                        fc_id, fc_name, result, latency_ms, error_msg
+                    )
+                except Exception as ex:
+                    logger.warning(f"Error in tool_call_end_callback: {ex}")
 
     async def _send_function_response(
         self, fc_id: str, fc_name: str, result: Dict[str, Any]

@@ -36,6 +36,7 @@ from ssl_auto_streamer.event_detector import EventDetector, DetectedEvent
 from ssl_auto_streamer.ssl.tracker_client import TrackerClient
 from ssl_auto_streamer.ssl.gc_client import GCClient
 from ssl_auto_streamer.ssl.vision_client import VisionClient
+from ssl_auto_streamer.logger import AiActivityLogger
 from ssl_auto_streamer.web.server import WebServer
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,11 @@ class CommentaryApp:
         # Initialize event detector
         self._event_detector = EventDetector()
 
+        # AI Activity Logger
+        ai_logger_cfg = config.get("ai_logger", {})
+        self._ai_logger = AiActivityLogger(ai_logger_cfg)
+        self._current_turn_id: Optional[str] = None
+
         # Gemini client (Live API / audio mode)
         api_key = gemini_cfg.get("api_key") or os.environ.get("GEMINI_API_KEY", "")
         gemini_config = GeminiConfig(
@@ -136,8 +142,13 @@ class CommentaryApp:
         self._gemini_client.set_function_call_handler(self._function_handler.handle_async)
         self._gemini_client.set_disconnect_callback(self._on_gemini_disconnected)
         self._gemini_client.set_turn_complete_callback(self._on_turn_complete)
+        self._gemini_client.set_interrupted_callback(self._on_gemini_interrupted)
         self._gemini_client.set_transcription_callback(self._on_transcription_received)
         self._gemini_client.set_thought_callback(self._on_thought_received)
+        self._gemini_client.set_tool_call_callbacks(
+            start_callback=self._on_tool_call_start,
+            end_callback=self._on_tool_call_end,
+        )
 
         # Audio output
         self._audio_sample_rate = gemini_cfg.get("sample_rate", 24000)
@@ -214,6 +225,7 @@ class CommentaryApp:
                 on_stop_replay=self.stop_replay,
                 get_replay_status=self.get_replay_status,
                 on_run_pytest=self.run_pytest_suite,
+                ai_logger=self._ai_logger,
             )
 
         if uses_client_audio(self._audio_output_mode) and self._web_server is None:
@@ -354,12 +366,14 @@ class CommentaryApp:
         if uses_client_audio(self._audio_output_mode) and self._web_server:
             self._web_server.push_audio_control("clear")
 
-    def _clear_audio_output(self) -> None:
-        """Clear queued audio for all active output targets."""
+    def _clear_audio_output(self) -> int:
+        """Clear queued audio for all active output targets and return discarded bytes."""
+        discarded_bytes = 0
         if uses_server_audio(self._audio_output_mode):
-            self._audio_output.clear_buffer()
+            discarded_bytes = self._audio_output.clear_buffer()
         if uses_client_audio(self._audio_output_mode) and self._web_server:
             self._web_server.push_audio_control("clear")
+        return discarded_bytes
 
     def _play_audio_output(self, pcm_data: bytes) -> None:
         """Route Gemini output PCM to the selected output target(s)."""
@@ -416,6 +430,12 @@ class CommentaryApp:
         if success:
             self._connected = True
             self._streaming = True
+            self._ai_logger.log_session_start(
+                model=self._gemini_client._config.model,
+                voice=self._gemini_client._config.voice,
+                sample_rate=self._audio_sample_rate,
+                thinking_level=self._gemini_client._config.thinking_level,
+            )
             self._start_audio_output()
             logger.info(
                 "Connected to Gemini API, audio output mode=%s",
@@ -423,14 +443,21 @@ class CommentaryApp:
             )
             await self._send_initial_context()
             blue_name, yellow_name = self._writer.get_team_names()
-            startup_msg = json.dumps({
+            startup_dict = {
                 "mode": "startup",
                 "instruction": "試合前の挨拶として、対戦カード（両チーム名）と簡単な見どころを述べてください。「システム起動」などのメタ発言は禁止。",
                 "teams": {
                     "blue": get_team_reading_from_data(blue_name, self._team_profiles),
                     "yellow": get_team_reading_from_data(yellow_name, self._team_profiles),
                 },
-            }, ensure_ascii=False)
+            }
+            startup_msg = json.dumps(startup_dict, ensure_ascii=False)
+            turn_id = self._ai_logger.start_turn(
+                trigger_type="startup",
+                priority=1,
+                payload=startup_dict,
+            )
+            self._current_turn_id = turn_id
             await self._gemini_client.set_thinking_level(ThinkingLevel.MEDIUM)
             await self._gemini_client.send_text(startup_msg)
         else:
@@ -447,13 +474,12 @@ class CommentaryApp:
         logger.info("Stopping streaming...")
         self._streaming = False
         self._connected = False
-
-        if self._gemini_client.is_connected():
-            await self._gemini_client.disconnect()
-
-        self._stop_audio_output()
         self._initial_context_sent = False
         self._reconnect_attempts = 0
+        self._ai_logger.log_session_end(reason="stopped_by_user")
+        if self._gemini_client.is_connected():
+            await self._gemini_client.disconnect()
+        self._stop_audio_output()
         logger.info("Streaming stopped")
 
     async def _run_replay_loop(self) -> None:
@@ -588,6 +614,7 @@ class CommentaryApp:
         if self._web_server:
             await self._web_server.stop()
 
+        self._ai_logger.close()
         logger.info("Shutdown complete")
 
     def _log_callback_error(self, source: str, message: str) -> None:
@@ -721,10 +748,22 @@ class CommentaryApp:
                 or prev_mode == CommentaryMode.ANALYST
             ):
                 logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
-                self._clear_audio_output()
+                discarded = self._clear_audio_output()
+                self._ai_logger.log_utterance_interrupted(
+                    self._current_turn_id,
+                    discarded,
+                    reason=f"barge_in_by_{event.event_type}",
+                )
 
             json_payload = self._reader.to_gemini_json(request)
-            logger.info(f"Sending reflex commentary for {event.event_type}")
+            turn_id = self._ai_logger.start_turn(
+                trigger_type="reflex",
+                event_type=event.event_type,
+                priority=request.priority,
+                payload=json_payload,
+            )
+            self._current_turn_id = turn_id
+            logger.info(f"Sending reflex commentary for {event.event_type} (turn={turn_id})")
             asyncio.create_task(self._send_reflex(json_payload, request.priority))
             self._last_commentary_time[event.event_type] = current_time
             if self._web_server:
@@ -749,6 +788,12 @@ class CommentaryApp:
                     request = self._reader.generate_analysis()
                     if request:
                         json_payload = self._reader.to_gemini_json(request)
+                        turn_id = self._ai_logger.start_turn(
+                            trigger_type="analyst",
+                            priority=1,
+                            payload=json_payload,
+                        )
+                        self._current_turn_id = turn_id
                         await self._gemini_client.set_thinking_level(ThinkingLevel.HIGH)
                         await self._gemini_client.send_text(json_payload)
                         if self._web_server:
@@ -796,6 +841,12 @@ class CommentaryApp:
                 self._connected = True
                 self._reconnect_attempts = 0
                 self._initial_context_sent = False
+                self._ai_logger.log_session_start(
+                    model=self._gemini_client._config.model,
+                    voice=self._gemini_client._config.voice,
+                    sample_rate=self._audio_sample_rate,
+                    thinking_level=self._gemini_client._config.thinking_level,
+                )
                 self._start_audio_output()
                 logger.info(
                     "Reconnected to Gemini API, audio output mode=%s",
@@ -810,24 +861,70 @@ class CommentaryApp:
         """Called by GeminiLiveApiClient when WebSocket closes."""
         logger.warning("Gemini API disconnected")
         self._connected = False
+        self._ai_logger.log_session_end(reason="disconnected")
+
+    def _on_gemini_interrupted(self) -> None:
+        """Called when Gemini Live API signals output speech was interrupted."""
+        logger.info("Gemini server interrupted output speech")
+        discarded = self._clear_audio_output()
+        self._ai_logger.log_utterance_interrupted(
+            self._current_turn_id,
+            discarded,
+            reason="server_interrupted",
+        )
+
+    def _on_tool_call_start(
+        self, call_id: str, name: str, args: Dict[str, Any]
+    ) -> None:
+        """Called when Gemini Live API requests a function call."""
+        self._ai_logger.log_tool_call_start(
+            self._current_turn_id,
+            call_id=call_id,
+            name=name,
+            args=args,
+            source="live_api",
+        )
+
+    def _on_tool_call_end(
+        self,
+        call_id: str,
+        name: str,
+        result: Any,
+        latency_ms: float,
+        error: Optional[str] = None,
+    ) -> None:
+        """Called when a function call execution finishes."""
+        self._ai_logger.log_tool_call_end(
+            self._current_turn_id,
+            call_id=call_id,
+            name=name,
+            result=result,
+            latency_ms=latency_ms,
+            error=error,
+            source="live_api",
+        )
 
     def _on_audio_received(self, pcm_data: bytes) -> None:
         """Handle received audio from Gemini (audio mode)."""
+        self._ai_logger.log_audio_received(self._current_turn_id, len(pcm_data))
         self._play_audio_output(pcm_data)
 
     def _on_transcription_received(self, text: str) -> None:
         """Handle output audio transcription from Gemini."""
+        self._ai_logger.log_transcription(self._current_turn_id, text)
         if self._web_server:
             self._web_server.push_transcription(text)
 
     def _on_thought_received(self, text: str) -> None:
         """Handle reasoning/thought stream from Gemini."""
+        self._ai_logger.log_thought(self._current_turn_id, text)
         if self._web_server:
             self._web_server.push_thought(text)
 
     def _on_turn_complete(self) -> None:
         """Handle end of Gemini turn."""
         self._flush_audio_output()
+        self._ai_logger.log_utterance_complete(self._current_turn_id)
 
     async def _send_initial_context(self) -> None:
         """Send SSL rules and team info as initial context."""
@@ -843,8 +940,15 @@ class CommentaryApp:
             tournament_context=self._tournament_context,
         )
         logger.info("Sending initial context to Gemini")
+        payload = f"[SYSTEM CONTEXT]\n{context}"
+        turn_id = self._ai_logger.start_turn(
+            trigger_type="initial_context",
+            priority=0,
+            payload=payload,
+        )
+        self._current_turn_id = turn_id
         await self._gemini_client.set_thinking_level(ThinkingLevel.MINIMAL)
-        await self._gemini_client.send_text(f"[SYSTEM CONTEXT]\n{context}")
+        await self._gemini_client.send_text(payload)
         self._initial_context_sent = True
 
     async def _send_reflex(self, payload: str, priority: int) -> None:
@@ -910,5 +1014,11 @@ class CommentaryApp:
             }
 
         update_json = json.dumps(update, ensure_ascii=False, indent=2)
+        turn_id = self._ai_logger.start_turn(
+            trigger_type="team_update",
+            priority=0,
+            payload=update,
+        )
+        self._current_turn_id = turn_id
         await self._gemini_client.set_thinking_level(ThinkingLevel.MINIMAL)
         await self._gemini_client.send_text(f"[TEAM UPDATE]\n{update_json}")

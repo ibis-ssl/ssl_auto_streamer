@@ -28,7 +28,7 @@ build-backend = "hatchling.build"
 packages = ["ssl_auto_streamer"]
 
 [tool.pytest.ini_options]
-addopts = "-p no:launch_testing -p no:launch_pytest"
+addopts = "-p no:launch_testing -p no:launch_pytest -p no:launch-testing-ros"
 
 [tool.ruff]
 extend-exclude = ["ssl_auto_streamer/ssl/*_pb2.py"]

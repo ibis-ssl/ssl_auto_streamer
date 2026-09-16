@@ -130,11 +130,18 @@ class PcmAudioOutput:
         """Signal playback thread to drain remaining bytes (call on turn_complete)."""
         self._flush_event.set()
 
-    def clear_buffer(self) -> None:
-        """Discard all buffered audio (for barge-in support)."""
+    def get_buffered_bytes(self) -> int:
+        """Return currently buffered unplayed PCM bytes."""
         with self._lock:
+            return len(self._buffer)
+
+    def clear_buffer(self) -> int:
+        """Discard all buffered audio (for barge-in support) and return discarded byte count."""
+        with self._lock:
+            discarded = len(self._buffer)
             self._buffer.clear()
             self._drain_complete.set()
+            return discarded
 
     async def wait_until_drained(self, timeout: float = 10.0) -> bool:
         """バッファが空になるまで待機する（asyncio対応）。タイムアウト時はFalseを返す。"""

@@ -61,6 +61,7 @@ class WebServer:
         on_stop_replay: Optional[Callable[[], bool]] = None,
         get_replay_status: Optional[Callable[[], Dict[str, Any]]] = None,
         on_run_pytest: Optional[Callable[[], Any]] = None,
+        ai_logger: Optional[Any] = None,
     ):
         self._host = host
         self._port = port
@@ -80,6 +81,7 @@ class WebServer:
         self._on_stop_replay = on_stop_replay
         self._get_replay_status = get_replay_status
         self._on_run_pytest = on_run_pytest
+        self._ai_logger = ai_logger
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._audio_output_clients: Set[web.WebSocketResponse] = set()
@@ -107,6 +109,7 @@ class WebServer:
         self._app.router.add_post("/api/config", self._handle_post_config)
         self._app.router.add_get("/api/status", self._handle_get_status)
         self._app.router.add_get("/api/team-profiles", self._handle_get_team_profiles)
+        self._app.router.add_get("/api/ai-logs", self._handle_get_ai_logs)
         self._app.router.add_post("/api/streaming/start", self._handle_streaming_start)
         self._app.router.add_post("/api/streaming/stop", self._handle_streaming_stop)
         self._app.router.add_post("/api/ssl/switch-port", self._handle_switch_port)
@@ -569,6 +572,19 @@ class WebServer:
             logger.warning(f"Failed to load team_profiles.yaml: {e}")
             profiles = {}
         return web.json_response(profiles)
+
+    async def _handle_get_ai_logs(self, request: web.Request) -> web.Response:
+        """Return recent structured AI activity logs for debugging."""
+        if not self._ai_logger:
+            return web.json_response({"logs": [], "total": 0})
+        limit_str = request.query.get("limit", "50")
+        try:
+            limit = min(200, max(1, int(limit_str)))
+        except ValueError:
+            limit = 50
+        event_filter = request.query.get("event")
+        logs = self._ai_logger.get_recent_logs(limit=limit, event_type=event_filter)
+        return web.json_response({"logs": logs, "total": len(logs)})
 
     async def _handle_replay_start(self, request: web.Request) -> web.Response:
         """Start match log replay dynamically."""

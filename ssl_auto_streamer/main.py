@@ -48,6 +48,7 @@ def load_config(args: argparse.Namespace) -> Dict[str, Any]:
     config.setdefault("ssl", {})
     config.setdefault("commentary", {})
     config.setdefault("web", {})
+    config.setdefault("ai_logger", {})
 
     # Override with CLI arguments
     if args.gemini_api_key:
