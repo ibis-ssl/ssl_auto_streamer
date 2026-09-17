@@ -22,9 +22,14 @@ def test_normalize_live_model_name():
     assert normalize_live_model_name("") == "gemini-3.8-live"
     assert normalize_live_model_name("gemini-3.8-live") == "gemini-3.8-live"
     assert normalize_live_model_name("gemini-3.8-flash-live") == "gemini-3.8-live"
-    assert normalize_live_model_name("gemini-3.8-flash-live-preview") == "gemini-3.8-live"
+    assert (
+        normalize_live_model_name("gemini-3.8-flash-live-preview") == "gemini-3.8-live"
+    )
     assert normalize_live_model_name("gemini 3.8 flash live") == "gemini-3.8-live"
-    assert normalize_live_model_name("gemini-3.8-live-extended-thinking") == "gemini-3.8-live-extended-thinking"
+    assert (
+        normalize_live_model_name("gemini-3.8-live-extended-thinking")
+        == "gemini-3.8-live-extended-thinking"
+    )
 
 
 def test_gemini_config_defaults():
@@ -56,7 +61,7 @@ def test_function_handler_new_tools():
             "TIGERs Mannheim": {
                 "reading": "タイガース",
                 "style": "精密パス",
-            }
+            },
         }
     }
     ssl_rules = {
@@ -70,7 +75,7 @@ def test_function_handler_new_tools():
                 "description": "ボールを6.5m/s以上で蹴る",
                 "penalty": "STOP後フリーキック",
             }
-        }
+        },
     }
 
     handler = FunctionHandler(
@@ -91,7 +96,9 @@ def test_function_handler_new_tools():
     assert "yellow" in profile
 
     # 3. get_ssl_rule with specific key
-    rule_detail = handler.handle("get_ssl_rule", {"rule_key": "BOT_KICKED_BALL_TOO_FAST"})
+    rule_detail = handler.handle(
+        "get_ssl_rule", {"rule_key": "BOT_KICKED_BALL_TOO_FAST"}
+    )
     assert rule_detail.get("name_jp") == "ボール速度超過"
 
     # 4. get_ssl_rule without key (summary)
@@ -114,8 +121,11 @@ def test_live_api_thought_handling():
         "serverContent": {
             "modelTurn": {
                 "parts": [
-                    {"thought": True, "text": "相手ロボットがパスコースを切っているため、右サイドの展開を予測する。"},
-                    {"text": "青チームが素早くパスを回します。"}
+                    {
+                        "thought": True,
+                        "text": "相手ロボットがパスコースを切っているため、右サイドの展開を予測する。",
+                    },
+                    {"text": "青チームが素早くパスを回します。"},
                 ]
             }
         }
@@ -131,7 +141,10 @@ def test_live_api_thought_handling():
 
 def test_visual_streamer_rendering():
     """Verify FieldVisualStreamer generates valid JPEG image bytes from game state."""
-    from ssl_auto_streamer.gemini.visual_streamer import FieldVisualStreamer, PIL_AVAILABLE
+    from ssl_auto_streamer.gemini.visual_streamer import (
+        FieldVisualStreamer,
+        PIL_AVAILABLE,
+    )
     from ssl_auto_streamer.statler.world_model_writer import RobotSnapshot
 
     assert PIL_AVAILABLE is True
@@ -195,6 +208,7 @@ def test_live_api_client_send_image():
         assert len(chunks) == 1
         assert chunks[0]["mime_type"] == "image/jpeg"
         import base64
+
         decoded = base64.b64decode(chunks[0]["data"])
         assert decoded == dummy_image
 
@@ -274,5 +288,82 @@ def test_barge_in_modes_behavior():
         app._on_detected_event(shot_ev)
         await asyncio.sleep(0.01)
         assert len(sent_payloads) == 2  # Dispatched!
+
+    asyncio.run(_test())
+
+
+def test_autonomous_commentary_reader():
+    """Verify generate_analysis generates autonomous payloads when requested."""
+    writer = WorldModelWriter()
+    from ssl_auto_streamer.statler.world_model_reader import WorldModelReader
+
+    reader = WorldModelReader(writer)
+
+    # 1. Autonomous mode
+    auto_req = reader.generate_analysis(autonomous=True)
+    assert auto_req is not None
+    assert auto_req.event_data is not None
+    assert auto_req.event_data.get("mode") == "analyst"
+    assert "自律" in auto_req.event_data.get("instruction", "")
+    assert "play_situation" in auto_req.event_data.get("context", {})
+
+    # 2. Rule-based mode (backward compatibility, requires highlights or recent_events)
+    writer.add_event("PASS", {})
+    rule_req = reader.generate_analysis(autonomous=False)
+    assert rule_req is not None
+    assert rule_req.event_data is not None
+    assert rule_req.event_data.get("analysis_type") in (
+        "team_introduction",
+        "game_summary",
+    )
+
+
+def test_autonomous_commentary_app_integration():
+    """Verify CommentaryApp triggers autonomous commentary on stop events."""
+    import asyncio
+    import json
+    from ssl_auto_streamer.app import CommentaryApp
+    from ssl_auto_streamer.event_detector import DetectedEvent
+
+    async def _test():
+        config = {
+            "gemini": {"api_key": "dummy"},
+            "commentary": {"mode": "auto", "barge_in": "auto"},
+            "web": {"enabled": False},
+        }
+        app = CommentaryApp(config)
+        assert app._commentary_mode == "auto"
+
+        app._connected = True
+        app._streaming = True
+
+        sent_payloads = []
+
+        async def mock_send_reflex(payload, priority):
+            sent_payloads.append((payload, priority))
+
+        app._send_reflex = mock_send_reflex
+
+        # Trigger a stoppage event (STOP)
+        stop_ev = DetectedEvent(
+            event_type="STOP",
+            position=(0.0, 0.0),
+            ball_speed=0.0,
+            confidence=1.0,
+            metadata={"command": "STOP"},
+        )
+        app._on_detected_event(stop_ev)
+        await asyncio.sleep(0.01)
+
+        assert len(sent_payloads) == 1
+        payload_str, priority = sent_payloads[0]
+        payload = json.loads(payload_str)
+        assert "event" in payload
+        assert payload["event"]["data"].get("autonomous_analysis") is True
+        assert "一時停止" in payload["event"]["data"].get("instruction", "")
+
+        # Test Web config update updates _commentary_mode
+        app._on_web_config_update({"commentary": {"mode": "rule_based"}})
+        assert app._commentary_mode == "rule_based"
 
     asyncio.run(_test())

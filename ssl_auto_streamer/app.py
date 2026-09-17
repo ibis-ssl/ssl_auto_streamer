@@ -20,7 +20,10 @@ from ssl_auto_streamer.data import (
     get_team_reading_from_data,
 )
 from ssl_auto_streamer.statler import WorldModelWriter, WorldModelReader
-from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
+from ssl_auto_streamer.statler.world_model_writer import (
+    DEFAULT_BLUE_TEAM_NAME,
+    DEFAULT_YELLOW_TEAM_NAME,
+)
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
 from ssl_auto_streamer.gemini import (
     GeminiLiveApiClient,
@@ -65,18 +68,14 @@ class CommentaryApp:
         commentary_cfg = config.get("commentary", {})
         analysis_agent_cfg = config.get("analysis_agent", {})
 
-        raw_audio_output_mode = audio_cfg.get(
-            "output_mode", DEFAULT_AUDIO_OUTPUT_MODE
-        )
+        raw_audio_output_mode = audio_cfg.get("output_mode", DEFAULT_AUDIO_OUTPUT_MODE)
         if not is_valid_audio_output_mode(raw_audio_output_mode):
             logger.warning(
                 "Invalid audio.output_mode=%r; falling back to %s",
                 raw_audio_output_mode,
                 DEFAULT_AUDIO_OUTPUT_MODE,
             )
-        self._audio_output_mode = normalize_audio_output_mode(
-            raw_audio_output_mode
-        )
+        self._audio_output_mode = normalize_audio_output_mode(raw_audio_output_mode)
         self._config.setdefault("audio", {})["output_mode"] = self._audio_output_mode
 
         self._initial_context_sent: bool = False
@@ -87,7 +86,9 @@ class CommentaryApp:
         # Load config files
         self._ssl_rules: Dict = self._load_yaml("ssl_rules.yaml") or {}
         self._team_profiles: Dict = self._load_yaml("team_profiles.yaml") or {}
-        self._tournament_context: Dict = self._load_yaml("tournament_context.yaml") or {}
+        self._tournament_context: Dict = (
+            self._load_yaml("tournament_context.yaml") or {}
+        )
 
         # Load system instruction
         system_instruction = self._load_text("system_instruction.md") or ""
@@ -148,7 +149,9 @@ class CommentaryApp:
         )
         self._gemini_client = GeminiLiveApiClient(gemini_config)
         self._gemini_client.set_audio_callback(self._on_audio_received)
-        self._gemini_client.set_function_call_handler(self._function_handler.handle_async)
+        self._gemini_client.set_function_call_handler(
+            self._function_handler.handle_async
+        )
         self._gemini_client.set_disconnect_callback(self._on_gemini_disconnected)
         self._gemini_client.set_turn_complete_callback(self._on_turn_complete)
         self._gemini_client.set_interrupted_callback(self._on_gemini_interrupted)
@@ -204,10 +207,13 @@ class CommentaryApp:
         self._replay_task: Optional[asyncio.Task] = None
 
         # Commentary settings
-        self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
+        self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 3.0)
         self._writer_update_rate = commentary_cfg.get("writer_update_rate", 1.0)
         self._barge_in_mode = commentary_cfg.get("barge_in", "auto")
-        self._interrupt_priority_threshold = commentary_cfg.get("interrupt_priority_threshold", 2)
+        self._commentary_mode = commentary_cfg.get("mode", "auto")
+        self._interrupt_priority_threshold = commentary_cfg.get(
+            "interrupt_priority_threshold", 2
+        )
         self._auto_start = bool(commentary_cfg.get("auto_start", False))
 
         # State
@@ -293,6 +299,7 @@ class CommentaryApp:
 
     def _load_yaml(self, filename: str) -> Optional[Dict]:
         import yaml
+
         path = self._config_dir / filename
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -485,8 +492,12 @@ class CommentaryApp:
                     "mode": "startup",
                     "instruction": "試合前の挨拶として、対戦カード（両チーム名）と簡単な見どころを述べてください。「システム起動」などのメタ発言は禁止。",
                     "teams": {
-                        "blue": get_team_reading_from_data(blue_name, self._team_profiles),
-                        "yellow": get_team_reading_from_data(yellow_name, self._team_profiles),
+                        "blue": get_team_reading_from_data(
+                            blue_name, self._team_profiles
+                        ),
+                        "yellow": get_team_reading_from_data(
+                            yellow_name, self._team_profiles
+                        ),
                     },
                 }
                 startup_msg = json.dumps(startup_dict, ensure_ascii=False)
@@ -553,7 +564,9 @@ class CommentaryApp:
 
             logger.info("Log replay finished")
             if self._replay_exit_on_finish and not self._replay_loop:
-                logger.info("Replay exit-on-finish requested; waiting 5s for active commentary then shutting down...")
+                logger.info(
+                    "Replay exit-on-finish requested; waiting 5s for active commentary then shutting down..."
+                )
                 await asyncio.sleep(5.0)
                 self._running = False
         except asyncio.CancelledError:
@@ -587,7 +600,9 @@ class CommentaryApp:
             return False
 
         if not log_path:
-            default_sample = Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
+            default_sample = (
+                Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
+            )
             log_path = str(default_sample)
 
         path_obj = Path(log_path)
@@ -633,7 +648,9 @@ class CommentaryApp:
         """Return list of available scenario logs for replay."""
         scenarios_dir = Path(__file__).parent.parent / "tests" / "data" / "scenarios"
         real_cuts_dir = Path(__file__).parent.parent / "tests" / "data" / "real_cuts"
-        sample_log = Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
+        sample_log = (
+            Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
+        )
 
         metadata_map = {
             # 実試合切り出し（公式大会実データ）
@@ -724,42 +741,48 @@ class CommentaryApp:
         if real_cuts_dir.exists():
             for p in sorted(real_cuts_dir.glob("*.log.gz")):
                 meta = metadata_map.get(p.name, {})
-                results.append({
-                    "id": p.stem.replace(".log", ""),
-                    "filename": p.name,
-                    "path": str(p),
-                    "name": meta.get("name", p.name),
-                    "category": meta.get("category", "実試合切り出し"),
-                    "description": meta.get("description", ""),
-                    "recommended": meta.get("recommended", False),
-                })
+                results.append(
+                    {
+                        "id": p.stem.replace(".log", ""),
+                        "filename": p.name,
+                        "path": str(p),
+                        "name": meta.get("name", p.name),
+                        "category": meta.get("category", "実試合切り出し"),
+                        "description": meta.get("description", ""),
+                        "recommended": meta.get("recommended", False),
+                    }
+                )
 
         # 2. サンプルマッチ
         if sample_log.exists():
             meta = metadata_map.get(sample_log.name, {})
-            results.append({
-                "id": "sample_match",
-                "filename": sample_log.name,
-                "path": str(sample_log),
-                "name": meta.get("name", sample_log.name),
-                "category": meta.get("category", "実試合切り出し"),
-                "description": meta.get("description", ""),
-                "recommended": meta.get("recommended", True),
-            })
+            results.append(
+                {
+                    "id": "sample_match",
+                    "filename": sample_log.name,
+                    "path": str(sample_log),
+                    "name": meta.get("name", sample_log.name),
+                    "category": meta.get("category", "実試合切り出し"),
+                    "description": meta.get("description", ""),
+                    "recommended": meta.get("recommended", True),
+                }
+            )
 
         # 3. 合成テストシナリオ (scenarios)
         if scenarios_dir.exists():
             for p in sorted(scenarios_dir.glob("*.log.gz")):
                 meta = metadata_map.get(p.name, {})
-                results.append({
-                    "id": p.stem.replace(".log", ""),
-                    "filename": p.name,
-                    "path": str(p),
-                    "name": meta.get("name", p.name),
-                    "category": meta.get("category", "基本シナリオ"),
-                    "description": meta.get("description", ""),
-                    "recommended": meta.get("recommended", False),
-                })
+                results.append(
+                    {
+                        "id": p.stem.replace(".log", ""),
+                        "filename": p.name,
+                        "path": str(p),
+                        "name": meta.get("name", p.name),
+                        "category": meta.get("category", "基本シナリオ"),
+                        "description": meta.get("description", ""),
+                        "recommended": meta.get("recommended", False),
+                    }
+                )
 
         # Category priority: 実試合切り出し (0) -> 長尺マッチ (1) -> 基本シナリオ (2) -> その他 (3)
         cat_order = {"実試合切り出し": 0, "長尺マッチ": 1, "基本シナリオ": 2}
@@ -777,14 +800,18 @@ class CommentaryApp:
         import subprocess
 
         proc = await asyncio.create_subprocess_exec(
-            "uv", "run", "pytest",
+            "uv",
+            "run",
+            "pytest",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env={**os.environ, "PYTHONPATH": ""},
         )
         stdout, stderr = await proc.communicate()
-        success = (proc.returncode == 0)
-        out_text = stdout.decode("utf-8", errors="replace") + stderr.decode("utf-8", errors="replace")
+        success = proc.returncode == 0
+        out_text = stdout.decode("utf-8", errors="replace") + stderr.decode(
+            "utf-8", errors="replace"
+        )
         return {
             "success": success,
             "returncode": proc.returncode,
@@ -946,6 +973,19 @@ class CommentaryApp:
         self._reader.set_mode(CommentaryMode.REFLEX)
         request = self._reader.generate_reflex(event.event_type, event_data)
 
+        if self._commentary_mode == "auto" and event.event_type in (
+            "STOP",
+            "HALT",
+            "TIMEOUT",
+            "BALL_PLACEMENT",
+        ):
+            # 自律解説モード: 停止の事実を伝えた後、不自然な沈黙を作らず自律的に解説を展開させる
+            request.event_data["autonomous_analysis"] = True
+            request.event_data["instruction"] = (
+                f"{event.event_type}により試合が一時停止しました。状況を伝えた後、不自然な沈黙を作らず、"
+                f"直前のプレーや両チームのポジショニング・戦況を自律して2〜3文で解説してください。"
+            )
+
         # 直前リクエストとの短時間競合ガード（0.8秒以内）: 新イベントの優先度が直前以下かつ低優先度ならスキップ
         if (
             current_time - self._last_request_time < 0.8
@@ -971,7 +1011,9 @@ class CommentaryApp:
                     request.priority >= self._interrupt_priority_threshold
                     or prev_mode == CommentaryMode.ANALYST
                 ):
-                    logger.info(f"Barge-in triggered by {event.event_type} (priority={request.priority})")
+                    logger.info(
+                        f"Barge-in triggered by {event.event_type} (priority={request.priority})"
+                    )
                     discarded = self._clear_audio_output()
                     self._ai_logger.log_utterance_interrupted(
                         self._current_turn_id,
@@ -995,7 +1037,9 @@ class CommentaryApp:
             self._current_turn_id = turn_id
             self._last_request_time = current_time
             self._last_request_priority = request.priority
-            logger.info(f"Sending reflex commentary for {event.event_type} (turn={turn_id})")
+            logger.info(
+                f"Sending reflex commentary for {event.event_type} (turn={turn_id})"
+            )
             asyncio.create_task(self._send_reflex(json_payload, request.priority))
             self._last_commentary_time[event.event_type] = current_time
             if self._web_server:
@@ -1020,7 +1064,8 @@ class CommentaryApp:
                     self._reader.set_mode(CommentaryMode.ANALYST)
                     logger.info("Switching to analyst mode")
 
-                    request = self._reader.generate_analysis()
+                    is_autonomous = self._commentary_mode == "auto"
+                    request = self._reader.generate_analysis(autonomous=is_autonomous)
                     if request:
                         json_payload = self._reader.to_gemini_json(request)
                         turn_id = self._ai_logger.start_turn(
@@ -1030,10 +1075,15 @@ class CommentaryApp:
                         )
                         self._current_turn_id = turn_id
                         await self._gemini_client.set_thinking_level(ThinkingLevel.HIGH)
-                        if self._visual_stream_enabled and self._visual_streamer.is_available:
+                        if (
+                            self._visual_stream_enabled
+                            and self._visual_streamer.is_available
+                        ):
                             frame_bytes = self._visual_streamer.render_frame_bytes()
                             if frame_bytes:
-                                await self._gemini_client.send_image(frame_bytes, mime_type="image/jpeg")
+                                await self._gemini_client.send_image(
+                                    frame_bytes, mime_type="image/jpeg"
+                                )
                         await self._gemini_client.send_text(json_payload)
                         if self._web_server:
                             self._web_server.push_commentary("[アナリスト実況]")
@@ -1041,7 +1091,10 @@ class CommentaryApp:
     async def _visual_stream_loop(self) -> None:
         """Periodic loop to stream 2D field visual frames to Gemini 3.8 Live."""
         while self._running:
-            if not self._visual_stream_enabled or not self._visual_streamer.is_available:
+            if (
+                not self._visual_stream_enabled
+                or not self._visual_streamer.is_available
+            ):
                 await asyncio.sleep(1.0)
                 continue
 
@@ -1052,7 +1105,9 @@ class CommentaryApp:
             try:
                 frame_bytes = self._visual_streamer.render_frame_bytes()
                 if frame_bytes:
-                    await self._gemini_client.send_image(frame_bytes, mime_type="image/jpeg")
+                    await self._gemini_client.send_image(
+                        frame_bytes, mime_type="image/jpeg"
+                    )
             except Exception as e:
                 logger.debug(f"Visual stream frame error: {e}")
 
@@ -1074,7 +1129,9 @@ class CommentaryApp:
             if self._connected:
                 self._reconnect_attempts = 0
                 if self._gemini_client.session_age > self._session_refresh_threshold:
-                    logger.info("Session approaching 15-min limit, refreshing connection...")
+                    logger.info(
+                        "Session approaching 15-min limit, refreshing connection..."
+                    )
                     await self._gemini_client.disconnect()
                     self._connected = False
                     self._initial_context_sent = False
@@ -1089,7 +1146,7 @@ class CommentaryApp:
             if current_time < self._next_reconnect_time:
                 continue
 
-            backoff = min(5.0 * (2 ** self._reconnect_attempts), 300.0)
+            backoff = min(5.0 * (2**self._reconnect_attempts), 300.0)
             self._reconnect_attempts += 1
 
             logger.info(
@@ -1210,7 +1267,9 @@ class CommentaryApp:
             ssl_rules=self._ssl_rules,
             team_profiles=self._team_profiles,
             blue_team_name=blue_name if blue_name != DEFAULT_BLUE_TEAM_NAME else None,
-            yellow_team_name=yellow_name if yellow_name != DEFAULT_YELLOW_TEAM_NAME else None,
+            yellow_team_name=yellow_name
+            if yellow_name != DEFAULT_YELLOW_TEAM_NAME
+            else None,
             tournament_context=self._tournament_context,
         )
         logger.info("Sending initial context to Gemini")
@@ -1232,7 +1291,9 @@ class CommentaryApp:
         if self._visual_stream_enabled and self._visual_streamer.is_available:
             frame_bytes = self._visual_streamer.render_frame_bytes()
             if frame_bytes:
-                await self._gemini_client.send_image(frame_bytes, mime_type="image/jpeg")
+                await self._gemini_client.send_image(
+                    frame_bytes, mime_type="image/jpeg"
+                )
         await self._gemini_client.send_text(payload)
 
     def _fire_and_forget(self, coro: Any) -> None:
@@ -1260,9 +1321,8 @@ class CommentaryApp:
         self._writer_update_rate = commentary_cfg.get(
             "writer_update_rate", self._writer_update_rate
         )
-        self._barge_in_mode = commentary_cfg.get(
-            "barge_in", self._barge_in_mode
-        )
+        self._barge_in_mode = commentary_cfg.get("barge_in", self._barge_in_mode)
+        self._commentary_mode = commentary_cfg.get("mode", self._commentary_mode)
         self._interrupt_priority_threshold = commentary_cfg.get(
             "interrupt_priority_threshold", self._interrupt_priority_threshold
         )

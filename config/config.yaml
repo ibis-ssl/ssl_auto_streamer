@@ -12,10 +12,10 @@ audio:
   device: ''
   output_mode: client
 commentary:
-  analyst_silence_threshold: 5
+  analyst_silence_threshold: 3
   barge_in: auto  # auto (Gemini 3.8 Live による自動判断) または rule_based (優先度閾値)
   interrupt_priority_threshold: 2
-  mode: reflex_analyst
+  mode: auto  # auto (Gemini 3.8 Live による自律解説) または reflex_analyst (固定ルール)
   writer_update_rate: 1
 gemini:
   api_key: ''  # 環境変数 GEMINI_API_KEY を使用

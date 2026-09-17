@@ -205,10 +205,21 @@ class WorldModelReader:
 
         priority = 1
         if event_type in [
-            "GOAL", "POSSIBLE_GOAL", "FAST_SHOT", "SAVE", "FOUL", "KICKOFF", "PENALTY",
-            "FREE_KICK", "BALL_PLACEMENT", "BALL_PLACEMENT_FAILED",
-            "INVALID_GOAL", "PENALTY_KICK_FAILED", "EMERGENCY_STOP",
-            "YELLOW_CARD", "RED_CARD",
+            "GOAL",
+            "POSSIBLE_GOAL",
+            "FAST_SHOT",
+            "SAVE",
+            "FOUL",
+            "KICKOFF",
+            "PENALTY",
+            "FREE_KICK",
+            "BALL_PLACEMENT",
+            "BALL_PLACEMENT_FAILED",
+            "INVALID_GOAL",
+            "PENALTY_KICK_FAILED",
+            "EMERGENCY_STOP",
+            "YELLOW_CARD",
+            "RED_CARD",
         ]:
             priority = 2
         elif event_type in ["BALL_OUT"]:
@@ -222,10 +233,70 @@ class WorldModelReader:
             priority=priority,
         )
 
-    def generate_analysis(self) -> Optional[CommentaryRequest]:
+    def generate_analysis(self, autonomous: bool = True) -> Optional[CommentaryRequest]:
         """Generate analyst-mode commentary."""
         context = self._writer.get_context()
         highlights = self._writer.get_pending_highlights()
+
+        if self._writer.is_goal_under_review():
+            analysis_type = "goal_under_review"
+            payload = {
+                "mode": "analyst",
+                "analysis_type": analysis_type,
+                "instruction": self._ANALYSIS_INSTRUCTIONS["goal_under_review"],
+                "recommended_functions": self._get_recommended_functions(analysis_type),
+                "context": {
+                    "score": {
+                        "blue": context.blue_score,
+                        "yellow": context.yellow_score,
+                    },
+                    "elapsed_minutes": context.elapsed_seconds / 60.0,
+                    "momentum": context.momentum,
+                },
+            }
+            return CommentaryRequest(
+                mode=CommentaryMode.ANALYST,
+                event_data=payload,
+                context=context,
+                priority=1,
+            )
+
+        if autonomous:
+            # Gemini 3.8 Live 自律解説モード:
+            # 固定テンプレートを強制せず、最新のゲーム状況を提示してAI自身に切り口を自律選択させる
+            payload = {
+                "mode": "analyst",
+                "instruction": (
+                    "試合停止・膠着状態です。変な沈黙を作らず、直ちに自律して解説を展開してください。"
+                    "同じ定型的な総括やチーム紹介の繰り返しは禁止。最新の視覚配置や各種ツール（カード、スタッツ、ルール、ロボット状態）"
+                    "を活用し、毎回新鮮な独自の切り口で2〜3文以内で解説してください。"
+                ),
+                "context": {
+                    "score": {
+                        "blue": context.blue_score,
+                        "yellow": context.yellow_score,
+                    },
+                    "elapsed_minutes": round(context.elapsed_seconds / 60.0, 1),
+                    "momentum": context.momentum,
+                    "play_situation": self._writer.get_game_state_data().get(
+                        "play_situation", "UNKNOWN"
+                    ),
+                    "recent_events": context.recent_events[-3:],
+                },
+            }
+            if highlights:
+                top_highlight = max(highlights, key=lambda h: h.score)
+                payload["highlight"] = {
+                    "type": top_highlight.event_type,
+                    "data": top_highlight.data,
+                    "importance": top_highlight.score,
+                }
+            return CommentaryRequest(
+                mode=CommentaryMode.ANALYST,
+                event_data=payload,
+                context=context,
+                priority=1,
+            )
 
         if not highlights and not context.recent_events:
             return None
@@ -235,7 +306,9 @@ class WorldModelReader:
         payload = {
             "mode": "analyst",
             "analysis_type": analysis_type,
-            "instruction": self._ANALYSIS_INSTRUCTIONS.get(analysis_type, "試合状況を分析して解説する。"),
+            "instruction": self._ANALYSIS_INSTRUCTIONS.get(
+                analysis_type, "試合状況を分析して解説する。"
+            ),
             "recommended_functions": self._get_recommended_functions(analysis_type),
             "context": {
                 "score": {"blue": context.blue_score, "yellow": context.yellow_score},
@@ -265,8 +338,12 @@ class WorldModelReader:
             template = self._reflex_templates.get(request.event_type, {})
             event_payload: Dict[str, Any] = {
                 "type": request.event_type,
-                "hint": template.get("hint", "") if isinstance(template, dict) else template,
-                "instruction": template.get("instruction", "") if isinstance(template, dict) else "",
+                "hint": template.get("hint", "")
+                if isinstance(template, dict)
+                else template,
+                "instruction": template.get("instruction", "")
+                if isinstance(template, dict)
+                else "",
                 "data": request.event_data or {},
             }
             if isinstance(template, dict) and template.get("suggested_function"):
@@ -328,34 +405,69 @@ class WorldModelReader:
     def _get_recommended_functions(self, analysis_type: str) -> list:
         recommendations: Dict[str, list] = {
             "goal_replay": [
-                {"function": "get_highlight_details", "args": {"highlight_type": "goal"}, "purpose": "ゴールの詳細データ取得"},
-                {"function": "get_robot_status", "purpose": "シューターの位置と状態確認"},
+                {
+                    "function": "get_highlight_details",
+                    "args": {"highlight_type": "goal"},
+                    "purpose": "ゴールの詳細データ取得",
+                },
+                {
+                    "function": "get_robot_status",
+                    "purpose": "シューターの位置と状態確認",
+                },
             ],
             "goal_under_review": [
-                {"function": "get_game_state", "purpose": "審判の判定状況・試合ステータス確認"},
-                {"function": "get_highlight_details", "args": {"highlight_type": "shot"}, "purpose": "直前のシュート状況確認"},
+                {
+                    "function": "get_game_state",
+                    "purpose": "審判の判定状況・試合ステータス確認",
+                },
+                {
+                    "function": "get_highlight_details",
+                    "args": {"highlight_type": "shot"},
+                    "purpose": "直前のシュート状況確認",
+                },
             ],
             "shot_analysis": [
-                {"function": "get_highlight_details", "args": {"highlight_type": "shot"}, "purpose": "シュートの速度とコース"},
+                {
+                    "function": "get_highlight_details",
+                    "args": {"highlight_type": "shot"},
+                    "purpose": "シュートの速度とコース",
+                },
                 {"function": "get_ball_trajectory", "purpose": "ボールの軌跡確認"},
             ],
             "save_highlight": [
-                {"function": "get_highlight_details", "args": {"highlight_type": "save"}, "purpose": "セーブの詳細"},
+                {
+                    "function": "get_highlight_details",
+                    "args": {"highlight_type": "save"},
+                    "purpose": "セーブの詳細",
+                },
                 {"function": "get_robot_status", "purpose": "キーパーの反応確認"},
             ],
             "game_summary": [
                 {"function": "get_game_state", "purpose": "スコアと試合状況"},
                 {"function": "get_match_stats", "purpose": "試合全体の統計サマリー"},
-                {"function": "get_highlight_details", "args": {"highlight_type": "any", "count": 3}, "purpose": "主要ハイライト"},
+                {
+                    "function": "get_highlight_details",
+                    "args": {"highlight_type": "any", "count": 3},
+                    "purpose": "主要ハイライト",
+                },
             ],
             "team_introduction": [
                 {"function": "get_all_robots_summary", "purpose": "出場ロボット一覧"},
-                {"function": "get_team_cards_and_fouls", "purpose": "カード・ファール状況"},
+                {
+                    "function": "get_team_cards_and_fouls",
+                    "purpose": "カード・ファール状況",
+                },
             ],
             "tactical_analysis": [
-                {"function": "get_event_history", "args": {"count": 5}, "purpose": "直近イベントの流れ"},
+                {
+                    "function": "get_event_history",
+                    "args": {"count": 5},
+                    "purpose": "直近イベントの流れ",
+                },
                 {"function": "get_all_robots_summary", "purpose": "全ロボット概要"},
                 {"function": "get_game_state", "purpose": "試合の流れ"},
             ],
         }
-        return recommendations.get(analysis_type, [{"function": "get_game_state", "purpose": "試合状況確認"}])
+        return recommendations.get(
+            analysis_type, [{"function": "get_game_state", "purpose": "試合状況確認"}]
+        )
