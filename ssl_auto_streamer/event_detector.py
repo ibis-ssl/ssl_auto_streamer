@@ -168,10 +168,37 @@ class EventDetector:
         self._last_shot_speed: float = 0.0
         self._last_shot_time: float = 0.0
         self._last_ball_pos: Tuple[float, float] = (0.0, 0.0)
+        self._blue_team_on_positive_half: Optional[bool] = None
+
+    def reset(self) -> None:
+        """Reset all detector internal state for a new match or replay."""
+        self._seen_gc_event_ids.clear()
+        self._last_gc_command = None
+        self._last_gc_command_counter = None
+        self._last_gc_stage = None
+        self._cards_initialized = False
+        self._last_blue_yellow_cards = 0
+        self._last_yellow_yellow_cards = 0
+        self._last_blue_red_cards = 0
+        self._last_yellow_red_cards = 0
+
+        self._prev_ball_pos = None
+        self._prev_ball_speed = 0.0
+        self._prev_possessor = None
+        self._recent_possessors.clear()
+        self._shot_in_progress = False
+        self._shot_start_time = 0.0
+        self._last_shot_speed = 0.0
+        self._last_shot_time = 0.0
+        self._last_ball_pos = (0.0, 0.0)
+        self._blue_team_on_positive_half = None
 
     def update_from_referee(self, referee: Any) -> List[DetectedEvent]:
         """Detect events from Referee protobuf message."""
         events: List[DetectedEvent] = []
+
+        if hasattr(referee, "HasField") and referee.HasField("blue_team_on_positive_half"):
+            self._blue_team_on_positive_half = referee.blue_team_on_positive_half
 
         if not referee.game_events:
             self._seen_gc_event_ids.clear()

@@ -46,7 +46,7 @@ class WorldModelReader:
         self._reflex_templates = {
             "GOAL": {
                 "hint": "得点です。",
-                "instruction": "得点したチーム名とロボットID、更新後のスコアを1〜2文で簡潔に伝える。詳細な振り返りは直後の解説で行うため端的に完結させる。",
+                "instruction": "得点したチーム名とロボットID、更新後のスコアを1〜2文で簡潔に伝える。スコアは必ず得点したチーム（またはリードしているチーム）を先に読んでください（例: 'アイビスが先制！1対0です'）。'0対1'のように失点側を先に読むことは禁止です。詳細な振り返りは直後の解説で行うため端的に完結させる。",
                 "suggested_function": None,
             },
             "POSSIBLE_GOAL": {
@@ -365,8 +365,34 @@ class WorldModelReader:
     def _context_to_dict(self, context: Optional[GameContext]) -> Dict[str, Any]:
         if not context:
             return {}
+
+        blue_on_pos = (
+            self._writer._is_team_defending_positive_half("blue")
+            if hasattr(self._writer, "_is_team_defending_positive_half")
+            else False
+        )
+        b_score = context.blue_score
+        y_score = context.yellow_score
+        b_name, y_name = (
+            self._writer.get_team_names()
+            if hasattr(self._writer, "get_team_names")
+            else ("青", "黄")
+        )
+
+        if b_score > y_score:
+            score_formatted = f"{b_name} {b_score} - {y_score} {y_name}（{b_score}対{y_score}）"
+        elif y_score > b_score:
+            score_formatted = f"{y_name} {y_score} - {b_score} {b_name}（{y_score}対{b_score}）"
+        else:
+            score_formatted = f"{b_score}対{y_score}の同点"
+
         return {
-            "score": {"blue": context.blue_score, "yellow": context.yellow_score},
+            "score": {"blue": b_score, "yellow": y_score},
+            "score_formatted": score_formatted,
+            "team_sides": {
+                "blue": "プラス側（右陣地）" if blue_on_pos else "マイナス側（左陣地）",
+                "yellow": "マイナス側（左陣地）" if blue_on_pos else "プラス側（右陣地）",
+            },
             "elapsed_minutes": context.elapsed_seconds / 60.0,
             "momentum": context.momentum,
             "recent_events": context.recent_events[-3:],

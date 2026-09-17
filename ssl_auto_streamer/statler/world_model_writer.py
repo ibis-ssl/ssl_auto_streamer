@@ -205,6 +205,127 @@ class WorldModelWriter:
             return (self._blue_team_name != DEFAULT_BLUE_TEAM_NAME
                     and self._yellow_team_name != DEFAULT_YELLOW_TEAM_NAME)
 
+    def _is_team_defending_positive_half(self, team: str) -> bool:
+        """Return True if the specified team is defending the positive half (X > 0)."""
+        # If blue_team_on_positive_half is True: blue defends X > 0, yellow defends X < 0.
+        # If False or None: blue defends X < 0, yellow defends X > 0 (standard convention).
+        blue_on_pos = bool(self._blue_team_on_positive_half)
+        if team == "blue":
+            return blue_on_pos
+        else:
+            return not blue_on_pos
+
+    def reset(self) -> None:
+        """Reset match state, statistics, highlights, and team names for a new match."""
+        with self._lock:
+            self._context = GameContext(
+                play_situation=0,
+                blue_score=0,
+                yellow_score=0,
+                elapsed_seconds=0.0,
+                momentum="NEUTRAL",
+                recent_events=[],
+            )
+            self._highlights.clear()
+            self._robot_snapshots_blue.clear()
+            self._robot_snapshots_yellow.clear()
+            self._current_ball_pos = (0.0, 0.0, 0.0)
+            self._current_ball_vel = (0.0, 0.0, 0.0)
+            self._ball_trajectory.clear()
+            self._blue_goalie_id = -1
+            self._yellow_goalie_id = -1
+            self._play_situation_name = "UNKNOWN"
+            self._ball_placement_state = {
+                "active": False,
+                "team": None,
+                "target_position": None,
+                "next_command": None,
+                "time_remaining_sec": None,
+                "teams": {"blue": {}, "yellow": {}},
+            }
+            self._ball_possession_team = None
+            self._match_start_time = None
+            self._stage_time_left_us = 0
+            self._blue_team_name = DEFAULT_BLUE_TEAM_NAME
+            self._yellow_team_name = DEFAULT_YELLOW_TEAM_NAME
+            self._blue_team_on_positive_half = None
+            self._team_names_changed = False
+            self._is_goal_under_review = False
+            self._goal_review_team = None
+
+            _zero_cards: Dict[str, Any] = {
+                "yellow_cards": 0,
+                "red_cards": 0,
+                "foul_counter": 0,
+                "yellow_card_times": [],
+                "max_allowed_bots": 11,
+            }
+            self._team_cards = {
+                "blue": dict(_zero_cards),
+                "yellow": dict(_zero_cards),
+            }
+
+            _zero_stats: Dict[str, int] = {
+                "shots": 0,
+                "goals": 0,
+                "saves": 0,
+                "passes": 0,
+                "fouls": 0,
+            }
+            self._stats = {
+                "blue": dict(_zero_stats),
+                "yellow": dict(_zero_stats),
+            }
+            self._possession_time_blue = 0.0
+            self._possession_time_yellow = 0.0
+            self._last_possession_update_time = None
+            self._event_history.clear()
+
+    def get_relative_location_desc(
+        self, x: float, y: float, team: Optional[str] = None
+    ) -> str:
+        """Return a human-readable Japanese location description relative to team side or field.
+
+        Example: '敵陣ゴール前', '敵陣右サイド', '自陣中央', 'センターサークル付近'
+        """
+        with self._lock:
+            dist_center = math.hypot(x, y)
+            if dist_center < 0.8:
+                return "センターサークル付近"
+
+            y_desc = ""
+            if abs(y) > self._field_width * 0.25:
+                y_desc = "右サイド" if y < 0 else "左サイド"
+            elif abs(y) > 0.5:
+                y_desc = "右寄り" if y < 0 else "左寄り"
+            else:
+                y_desc = "中央"
+
+            if team in ("blue", "yellow"):
+                defending_pos = self._is_team_defending_positive_half(team)
+                rel_x = -x if defending_pos else x
+                half = self._field_length / 2.0
+
+                if rel_x < -half * 0.65:
+                    x_desc = "自陣ゴール前"
+                elif rel_x < -0.8:
+                    x_desc = "自陣"
+                elif rel_x <= 0.8:
+                    x_desc = "中盤"
+                elif rel_x < half * 0.65:
+                    x_desc = "敵陣"
+                else:
+                    x_desc = "敵陣ゴール前"
+
+                if x_desc in ("自陣ゴール前", "敵陣ゴール前") and y_desc == "中央":
+                    return x_desc
+                return f"{x_desc}{y_desc}"
+            else:
+                half_desc = "右陣地（プラス側）" if x > 0 else "左陣地（マイナス側）"
+                if abs(x) <= 0.8:
+                    half_desc = "中盤"
+                return f"{half_desc}{y_desc}"
+
     def update(
         self,
         play_situation: int,
@@ -494,14 +615,41 @@ class WorldModelWriter:
 
     def get_game_state_data(self) -> Dict[str, Any]:
         with self._lock:
+            blue_on_pos = self._is_team_defending_positive_half("blue")
+            blue_side = "positive_half" if blue_on_pos else "negative_half"
+            yellow_side = "negative_half" if blue_on_pos else "positive_half"
+
+            b_score = self._context.blue_score
+            y_score = self._context.yellow_score
+            b_name = self._blue_team_name
+            y_name = self._yellow_team_name
+
+            if b_score > y_score:
+                score_str = f"{b_name} {b_score} - {y_score} {y_name}（{b_score}対{y_score}）"
+            elif y_score > b_score:
+                score_str = f"{y_name} {y_score} - {b_score} {b_name}（{y_score}対{b_score}）"
+            else:
+                score_str = f"{b_score}対{y_score}の同点"
+
             return {
                 "score": {
-                    "blue": self._context.blue_score,
-                    "yellow": self._context.yellow_score,
+                    "blue": b_score,
+                    "yellow": y_score,
                 },
+                "score_formatted": score_str,
                 "team_names": {
-                    "blue": self._blue_team_name,
-                    "yellow": self._yellow_team_name,
+                    "blue": b_name,
+                    "yellow": y_name,
+                },
+                "team_sides": {
+                    "blue": {
+                        "defending_side": blue_side,
+                        "desc": "自陣: プラス側（右） / 攻撃方向: マイナス側（左）" if blue_on_pos else "自陣: マイナス側（左） / 攻撃方向: プラス側（右）",
+                    },
+                    "yellow": {
+                        "defending_side": yellow_side,
+                        "desc": "自陣: マイナス側（左） / 攻撃方向: プラス側（右）" if blue_on_pos else "自陣: プラス側（右） / 攻撃方向: マイナス側（左）",
+                    },
                 },
                 "elapsed_minutes": round(self._context.elapsed_seconds / 60.0, 1),
                 "play_situation": self._play_situation_name,
@@ -972,13 +1120,16 @@ class WorldModelWriter:
             return "ゴールキーパー"
 
         x = robot.position[0]
-        if x < -4.0:
+        defending_pos = self._is_team_defending_positive_half(team)
+        rel_x = -x if defending_pos else x
+
+        if rel_x < -4.0:
             return "守備（ゴール前）"
-        elif x < -2.0:
+        elif rel_x < -2.0:
             return "守備"
-        elif x < 2.0:
+        elif rel_x < 2.0:
             return "中盤"
-        elif x < 4.0:
+        elif rel_x < 4.0:
             return "攻撃"
         else:
             return "攻撃（ゴール前）"
@@ -994,7 +1145,7 @@ class WorldModelWriter:
 
         for robot in active_robots:
             role = self._infer_robot_role(robot.robot_id, team)
-            zone = self._get_position_zone(robot.position[0])
+            zone = self._get_position_zone(robot.position[0], team=team)
             robots_info.append({"id": robot.robot_id, "role": role, "position_zone": zone})
 
         return {
@@ -1003,16 +1154,19 @@ class WorldModelWriter:
             "robots": robots_info,
         }
 
-    def _get_position_zone(self, x: float) -> str:
+    def _get_position_zone(self, x: float, team: str = "blue") -> str:
+        defending_pos = self._is_team_defending_positive_half(team)
+        rel_x = -x if defending_pos else x
+
         half = self._field_length / 2.0
         t1, t2 = half * 0.67, half * 0.33
-        if x < -t1:
+        if rel_x < -t1:
             return "goal_area"
-        elif x < -t2:
+        elif rel_x < -t2:
             return "defense"
-        elif x < t2:
+        elif rel_x < t2:
             return "midfield"
-        elif x < t1:
+        elif rel_x < t1:
             return "attack"
         else:
             return "opponent_goal_area"

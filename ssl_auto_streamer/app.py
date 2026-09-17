@@ -525,6 +525,8 @@ class CommentaryApp:
         self._streaming = False
         self._connected = False
         self._initial_context_sent = False
+        self._writer.reset()
+        self._event_detector.reset()
         self._reconnect_attempts = 0
         self._ai_logger.log_session_end(reason="stopped_by_user")
         if self._gemini_client.is_connected():
@@ -596,8 +598,13 @@ class CommentaryApp:
                     loop = args[1]
 
         if self._replay_task and not self._replay_task.done():
-            logger.warning("Replay is already active")
-            return False
+            self._replay_task.cancel()
+            self._replay_task = None
+
+        # Reset world model and event detector to avoid cross-match state contamination
+        self._writer.reset()
+        self._event_detector.reset()
+        self._initial_context_sent = False
 
         if not log_path:
             default_sample = (
@@ -630,6 +637,9 @@ class CommentaryApp:
         if self._replay_task and not self._replay_task.done():
             self._replay_task.cancel()
             self._replay_task = None
+            self._writer.reset()
+            self._event_detector.reset()
+            self._initial_context_sent = False
             logger.info("Dynamic replay stopped")
             return True
         return False
@@ -941,6 +951,17 @@ class CommentaryApp:
                     team_name, self._team_profiles
                 )
             event_data["metadata"] = metadata
+
+        # Determine involved team for relative location calculation
+        involved_team = None
+        if event.primary_robot and isinstance(event.primary_robot, dict):
+            involved_team = event.primary_robot.get("team")
+        elif event.metadata and isinstance(event.metadata, dict):
+            involved_team = event.metadata.get("by_team") or event.metadata.get("team")
+
+        event_data["relative_location"] = self._writer.get_relative_location_desc(
+            event.position[0], event.position[1], team=involved_team
+        )
 
         logger.info(f"Detected event: {event.event_type}")
         self._writer.add_event(event.event_type, event_data)
@@ -1354,6 +1375,12 @@ class CommentaryApp:
                 "key": yellow_name,
                 **get_team_profile_from_data(yellow_name, self._team_profiles),
             }
+
+        blue_on_pos = self._writer._is_team_defending_positive_half("blue")
+        update["team_sides"] = {
+            "blue": "自陣: プラス側（右） / 攻撃方向: マイナス側（左）" if blue_on_pos else "自陣: マイナス側（左） / 攻撃方向: プラス側（右）",
+            "yellow": "自陣: マイナス側（左） / 攻撃方向: プラス側（右）" if blue_on_pos else "自陣: プラス側（右） / 攻撃方向: マイナス側（左）",
+        }
 
         update_json = json.dumps(update, ensure_ascii=False, indent=2)
         turn_id = self._ai_logger.start_turn(
