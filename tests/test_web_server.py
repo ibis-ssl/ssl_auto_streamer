@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock
 
 from ssl_auto_streamer.web.server import WebServer

@@ -22,7 +22,13 @@ from ssl_auto_streamer.data import (
 from ssl_auto_streamer.statler import WorldModelWriter, WorldModelReader
 from ssl_auto_streamer.statler.world_model_writer import DEFAULT_BLUE_TEAM_NAME, DEFAULT_YELLOW_TEAM_NAME
 from ssl_auto_streamer.statler.world_model_reader import CommentaryMode
-from ssl_auto_streamer.gemini import GeminiLiveApiClient, FunctionHandler, AnalysisAgent, ThinkingLevel
+from ssl_auto_streamer.gemini import (
+    GeminiLiveApiClient,
+    FunctionHandler,
+    AnalysisAgent,
+    ThinkingLevel,
+    FieldVisualStreamer,
+)
 from ssl_auto_streamer.gemini.live_api_client import GeminiConfig
 from ssl_auto_streamer.audio import PcmAudioOutput
 from ssl_auto_streamer.audio_mode import (
@@ -153,6 +159,16 @@ class CommentaryApp:
             end_callback=self._on_tool_call_end,
         )
 
+        # Visual Streamer for Gemini 3.8 Live
+        visual_cfg = gemini_cfg.get("visual_stream", {})
+        self._visual_stream_enabled = visual_cfg.get("enabled", True)
+        self._visual_stream_fps = float(visual_cfg.get("fps", 1.0))
+        self._visual_streamer = FieldVisualStreamer(
+            self._writer,
+            width=int(visual_cfg.get("width", 640)),
+            height=int(visual_cfg.get("height", 480)),
+        )
+
         # Audio output
         self._audio_sample_rate = gemini_cfg.get("sample_rate", 24000)
         audio_device = audio_cfg.get("device") or None
@@ -231,6 +247,7 @@ class CommentaryApp:
                 get_replay_scenarios=self.get_available_scenarios,
                 on_run_pytest=self.run_pytest_suite,
                 ai_logger=self._ai_logger,
+                visual_streamer=self._visual_streamer,
             )
 
         if uses_client_audio(self._audio_output_mode) and self._web_server is None:
@@ -321,6 +338,7 @@ class CommentaryApp:
         tasks = [
             asyncio.create_task(self._analyst_check_loop()),
             asyncio.create_task(self._reconnect_loop()),
+            asyncio.create_task(self._visual_stream_loop()),
         ]
 
         if self._auto_start:
@@ -1002,9 +1020,34 @@ class CommentaryApp:
                         )
                         self._current_turn_id = turn_id
                         await self._gemini_client.set_thinking_level(ThinkingLevel.HIGH)
+                        if self._visual_stream_enabled and self._visual_streamer.is_available:
+                            frame_bytes = self._visual_streamer.render_frame_bytes()
+                            if frame_bytes:
+                                await self._gemini_client.send_image(frame_bytes, mime_type="image/jpeg")
                         await self._gemini_client.send_text(json_payload)
                         if self._web_server:
                             self._web_server.push_commentary("[アナリスト実況]")
+
+    async def _visual_stream_loop(self) -> None:
+        """Periodic loop to stream 2D field visual frames to Gemini 3.8 Live."""
+        while self._running:
+            if not self._visual_stream_enabled or not self._visual_streamer.is_available:
+                await asyncio.sleep(1.0)
+                continue
+
+            if not self._connected or not self._streaming:
+                await asyncio.sleep(0.5)
+                continue
+
+            try:
+                frame_bytes = self._visual_streamer.render_frame_bytes()
+                if frame_bytes:
+                    await self._gemini_client.send_image(frame_bytes, mime_type="image/jpeg")
+            except Exception as e:
+                logger.debug(f"Visual stream frame error: {e}")
+
+            interval = 1.0 / max(0.1, self._visual_stream_fps)
+            await asyncio.sleep(interval)
 
     async def _reconnect_loop(self) -> None:
         """Periodic reconnection loop."""
@@ -1176,6 +1219,10 @@ class CommentaryApp:
     async def _send_reflex(self, payload: str, priority: int) -> None:
         level = ThinkingLevel.MINIMAL if priority == 0 else ThinkingLevel.LOW
         await self._gemini_client.set_thinking_level(level)
+        if self._visual_stream_enabled and self._visual_streamer.is_available:
+            frame_bytes = self._visual_streamer.render_frame_bytes()
+            if frame_bytes:
+                await self._gemini_client.send_image(frame_bytes, mime_type="image/jpeg")
         await self._gemini_client.send_text(payload)
 
     def _fire_and_forget(self, coro: Any) -> None:

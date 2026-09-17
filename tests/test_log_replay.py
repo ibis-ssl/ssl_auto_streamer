@@ -11,7 +11,6 @@ import gzip
 from pathlib import Path
 import struct
 
-import pytest
 
 from ssl_auto_streamer.event_detector import EventDetector
 from ssl_auto_streamer.ssl.log_reader import (

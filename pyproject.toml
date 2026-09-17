@@ -9,6 +9,7 @@ dependencies = [
     "PyYAML>=6.0",
     "protobuf>=4.25",
     "aiohttp>=3.9",
+    "pillow>=12.3.0",
 ]
 
 [project.scripts]

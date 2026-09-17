@@ -28,10 +28,10 @@ iterate:
 	uv run python scripts/run_commentary_iteration.py $(SAMPLE_LOG)
 
 test:
-	PYTHONPATH="" uv run pytest -p no:launch-testing-ros -p no:ament_lint
+	PYTHONPATH="" uv run pytest -p no:launch_testing_ros_pytest_entrypoint -p no:launch-testing-ros -p no:ament_lint
 
 test-log:
-	PYTHONPATH="" uv run pytest -p no:launch-testing-ros -p no:ament_lint tests/test_log_replay.py -v
+	PYTHONPATH="" uv run pytest -p no:launch_testing_ros_pytest_entrypoint -p no:launch-testing-ros -p no:ament_lint tests/test_log_replay.py -v
 
 clean:
 	find . -name "*.pyc" -delete

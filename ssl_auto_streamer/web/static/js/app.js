@@ -554,9 +554,19 @@ function formatSeconds(value) {
 // ===== Status Indicators =====
 function updateStatusIndicators(status) {
   if (!status) return;
-  setStatusDot('status-gemini', status.gemini_connected, 'Gemini API');
+  const geminiLabel = status.gemini_model ? `Gemini (${status.gemini_model})` : 'Gemini 3.8 Live';
+  setStatusDot('status-gemini', status.gemini_connected, geminiLabel);
   setStatusDot('status-tracker', status.tracker_receiving, 'Vision Tracker');
   setStatusDot('status-gc', status.gc_receiving, 'Game Controller');
+  if (status.visual_stream_available !== undefined) {
+    const visualItem = document.getElementById('status-visual');
+    if (visualItem) {
+      const dot = visualItem.querySelector('.status-dot');
+      const text = visualItem.querySelector('.status-label');
+      dot.className = 'status-dot ' + (status.visual_stream_available ? 'ok' : 'ng');
+      if (text) text.textContent = '視覚入力: ' + (status.visual_stream_available ? '有効' : '無効');
+    }
+  }
   updateClientAudioAvailability(status);
   if (typeof updatePortStatusUI === 'function') {
     updatePortStatusUI(status.port_status);

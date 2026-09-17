@@ -127,3 +127,90 @@ def test_live_api_thought_handling():
     assert "相手ロボットがパスコースを切っている" in received_thoughts[0]
     assert len(received_texts) == 1
     assert "青チームが素早くパスを回します" in received_texts[0]
+
+
+def test_visual_streamer_rendering():
+    """Verify FieldVisualStreamer generates valid JPEG image bytes from game state."""
+    from ssl_auto_streamer.gemini.visual_streamer import FieldVisualStreamer, PIL_AVAILABLE
+    from ssl_auto_streamer.statler.world_model_writer import RobotSnapshot
+
+    assert PIL_AVAILABLE is True
+
+    writer = WorldModelWriter()
+    # Add dummy robot and ball data
+    writer._current_ball_pos = (1.2, -0.5, 0.0)
+    writer._current_ball_vel = (2.0, 1.0, 0.0)
+    writer._robot_snapshots_blue[3] = RobotSnapshot(
+        robot_id=3,
+        team="blue",
+        position=(-1.0, 0.5, 0.78),
+        velocity=(1.0, 0.0),
+        is_available=True,
+        has_ball_contact=True,
+    )
+    writer._robot_snapshots_yellow[0] = RobotSnapshot(
+        robot_id=0,
+        team="yellow",
+        position=(4.0, 0.0, 3.14),
+        velocity=(0.0, 0.0),
+        is_available=True,
+        has_ball_contact=False,
+    )
+
+    streamer = FieldVisualStreamer(writer, width=320, height=240, jpeg_quality=70)
+    assert streamer.is_available is True
+
+    frame_bytes = streamer.render_frame_bytes()
+    assert frame_bytes is not None
+    assert len(frame_bytes) > 500
+    # JPEG magic bytes: 0xFF, 0xD8, 0xFF
+    assert frame_bytes[:3] == b"\xff\xd8\xff"
+    assert streamer.get_last_frame() == frame_bytes
+
+
+def test_live_api_client_send_image():
+    """Verify GeminiLiveApiClient.send_image sends correct realtime_input payload."""
+    import asyncio
+    import json
+
+    async def _test():
+        client = GeminiLiveApiClient(GeminiConfig(api_key="dummy_key"))
+        client._connected = True
+
+        sent_messages = []
+
+        class MockWs:
+            async def send(self, data):
+                sent_messages.append(data)
+
+        client._ws = MockWs()
+
+        dummy_image = b"\xff\xd8\xff\xe0dummy_jpeg_bytes"
+        await client.send_image(dummy_image, mime_type="image/jpeg")
+
+        assert len(sent_messages) == 1
+        payload = json.loads(sent_messages[0])
+        assert "realtime_input" in payload
+        chunks = payload["realtime_input"]["media_chunks"]
+        assert len(chunks) == 1
+        assert chunks[0]["mime_type"] == "image/jpeg"
+        import base64
+        decoded = base64.b64decode(chunks[0]["data"])
+        assert decoded == dummy_image
+
+    asyncio.run(_test())
+
+
+def test_switch_model():
+    """Verify switch_model updates client config."""
+    import asyncio
+
+    async def _test():
+        client = GeminiLiveApiClient(GeminiConfig(model="gemini-3.8-live"))
+        assert client._config.model == "gemini-3.8-live"
+
+        await client.switch_model("gemini-3.8-live-extended-thinking")
+        assert client._config.model == "gemini-3.8-live-extended-thinking"
+
+    asyncio.run(_test())
+

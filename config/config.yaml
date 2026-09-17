@@ -19,9 +19,15 @@ commentary:
 gemini:
   api_key: ''  # 環境変数 GEMINI_API_KEY を使用
   model: gemini-3.8-live
+  thinking_model: gemini-3.8-live-extended-thinking
   output_transcription: true
   sample_rate: 24000
   thinking_level: medium
+  visual_stream:
+    enabled: true
+    fps: 1.0
+    width: 640
+    height: 480
 ssl:
   gc_addr: 224.5.23.1
   gc_ports:

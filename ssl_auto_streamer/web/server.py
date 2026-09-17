@@ -63,6 +63,7 @@ class WebServer:
         get_replay_scenarios: Optional[Callable[[], List[Dict[str, Any]]]] = None,
         on_run_pytest: Optional[Callable[[], Any]] = None,
         ai_logger: Optional[Any] = None,
+        visual_streamer: Optional[Any] = None,
     ):
         self._host = host
         self._port = port
@@ -84,6 +85,7 @@ class WebServer:
         self._get_replay_scenarios = get_replay_scenarios
         self._on_run_pytest = on_run_pytest
         self._ai_logger = ai_logger
+        self._visual_streamer = visual_streamer
 
         self._ws_clients: Set[web.WebSocketResponse] = set()
         self._audio_output_clients: Set[web.WebSocketResponse] = set()
@@ -119,6 +121,7 @@ class WebServer:
         self._app.router.add_post("/api/replay/stop", self._handle_replay_stop)
         self._app.router.add_get("/api/replay/status", self._handle_replay_status)
         self._app.router.add_get("/api/replay/scenarios", self._handle_replay_scenarios)
+        self._app.router.add_get("/api/visual-preview", self._handle_visual_preview)
         self._app.router.add_post("/api/test/run", self._handle_test_run)
         if self._static_dir.exists():
             self._app.router.add_static("/static", self._static_dir)
@@ -280,6 +283,8 @@ class WebServer:
         )
         status = {
             "gemini_connected": self._gemini_client.is_connected(),
+            "gemini_model": getattr(getattr(self._gemini_client, "_config", None), "model", "gemini-3.8-live"),
+            "visual_stream_available": bool(self._visual_streamer and self._visual_streamer.is_available),
             "tracker_receiving": tracker_receiving,
             "gc_receiving": gc_receiving,
             "streaming": streaming,
@@ -644,4 +649,15 @@ class WebServer:
             return web.json_response({"scenarios": []})
         scenarios = self._get_replay_scenarios()
         return web.json_response({"scenarios": scenarios})
+
+    async def _handle_visual_preview(self, request: web.Request) -> web.Response:
+        """Return the latest rendered field visual frame as JPEG."""
+        if not self._visual_streamer or not self._visual_streamer.is_available:
+            return web.Response(status=404, text="Visual streamer is not available")
+        frame = self._visual_streamer.get_last_frame()
+        if not frame:
+            frame = self._visual_streamer.render_frame_bytes()
+        if not frame:
+            return web.Response(status=503, text="No visual frame currently rendered")
+        return web.Response(body=frame, content_type="image/jpeg")
 

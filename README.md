@@ -13,33 +13,39 @@ SSL Vision TrackerとGame Controllerから試合データをUDPマルチキャ�
 - **Web ダッシュボード** - フィールド可視化、イベントログ、設定変更、実況パイプラインの手動制御
 - **OBS 配信オーバーレイ** - スコアボード等をブラウザソースとしてOBSに組み込み可能
 - **チームプロファイル** - SSLチームの特徴・読み方・プレースタイルのデータベースを初期コンテキストとしてAIに提供
+- **Gemini 3.8 Live ノンブロッキング実況** - 会話を止めずに裏側でタスク（試合データ・統計照会）を並行実行し、自然なフィラー言葉で状況を繋ぎながら解説を統合
+- **リアルタイム視覚入力 (Visual Streamer)** - 2Dフィールド鳥瞰画像をLive APIへストリーミングし、ロボットの配置やオープンスペースを視覚的に直接把握
 
 ## アーキテクチャ
 
-Statlerパターン（Writer/Reader分離）を採用しています。
+Statlerパターン（Writer/Reader分離）とGemini 3.8 Liveマルチモーダルパイプラインを採用しています。
 
 ```
 SSL Vision Tracker (UDP 224.5.23.2:11010)
         |
-        v
-  TrackerClient ──> WorldModelWriter ──> WorldModelReader
-                            |                    |
-Game Controller (UDP 224.5.23.1:11003)          v
-        |                            Gemini Live API (WebSocket)
-        v                                        |
-    GCClient ──> EventDetector                  v
-                                          PcmAudioOutput
-                                         (PyAudio 24kHz)
-                                                 |
-                                          スピーカー再生
+        +───────────────+
+        |               v
+        v        FieldVisualStreamer ──> (JPEGフレーム 1fps)
+  TrackerClient ──> WorldModelWriter               |
+                            |                      v
+Game Controller (UDP)       v          Gemini 3.8 Live API (WebSocket)
+        |           WorldModelReader ──> (ノンブロッキング実況・ツール実行)
+        v                   |                      |
+     GCClient ──> EventDetector                    v
+                                             PcmAudioOutput
+                                            (PyAudio 24kHz)
+                                                    |
+                                             スピーカー再生
 ```
 
 **データフロー**:
 1. UDP受信 → protobufデコード → WorldModelWriter（ゲーム状態更新）+ EventDetector（イベント検出）
-2. イベント発生時 → WorldModelReader がリフレックス実況リクエスト生成 → Gemini送信
-3. 静寂時（5秒以上）→ アナリストモードへ切替 → 解説リクエスト生成 → Gemini送信
-4. Gemini → PCM音声データをWebSocketで返却 → PcmAudioOutputで再生
-5. Web UI → WebSocket 5Hzでゲーム状態をブロードキャスト
+2. FieldVisualStreamer → 2Dフィールド鳥瞰フレームを生成し、Gemini Live APIに視覚ストリーミング
+3. イベント発生時 → WorldModelReader がリフレックス実況リクエスト生成 → Gemini送信
+4. 静寂時（5秒以上）→ アナリストモード（Extended Thinking）へ切替 → 思考と発話を同時に行いながら多段階戦術解説
+5. バックグラウンドツール実行 → 実況を止めずに裏側でデータ照会を行い、結果を自然に解説へ統合
+6. Gemini → PCM音声データをWebSocketで返却 → PcmAudioOutputで再生
+7. Web UI → WebSocket 5Hzでゲーム状態と視覚入力をブロードキャスト
 
 ## 必要条件
 

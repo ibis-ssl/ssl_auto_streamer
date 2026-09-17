@@ -281,6 +281,14 @@ class GeminiLiveApiClient:
         logger.info(f"thinkingLevel queued: {self._config.thinking_level} -> {level} (applies on next session)")
         self._config.thinking_level = level
 
+    async def switch_model(self, model: str) -> None:
+        """Switch current or next session model."""
+        canonical = normalize_live_model_name(model)
+        if canonical == self._config.model:
+            return
+        logger.info(f"Model updated: {self._config.model} -> {canonical}")
+        self._config.model = canonical
+
     async def send_audio(self, audio_b64: str) -> None:
         """Send audio via realtime_input (PCM 16-bit mono 16000Hz + trailing silence, base64-encoded)."""
         if not self._connected or not self._ws:
@@ -301,6 +309,29 @@ class GeminiLiveApiClient:
             logger.debug(f"[send_audio] {len(audio_b64)} chars (b64)")
         except Exception as e:
             logger.error(f"Failed to send audio: {e}")
+            self._connected = False
+
+    async def send_image(self, image_bytes: bytes, mime_type: str = "image/jpeg") -> None:
+        """Send real-time visual frame to Gemini Live API via realtime_input."""
+        if not self._connected or not self._ws:
+            logger.warning("Not connected to Gemini API")
+            return
+
+        image_b64 = base64.b64encode(image_bytes).decode("ascii")
+        message = {
+            "realtime_input": {
+                "media_chunks": [{
+                    "mime_type": mime_type,
+                    "data": image_b64,
+                }]
+            }
+        }
+
+        try:
+            await self._ws.send(json.dumps(message))
+            logger.debug(f"[send_image] {len(image_bytes)} bytes sent as {mime_type}")
+        except Exception as e:
+            logger.error(f"Failed to send image: {e}")
             self._connected = False
 
     async def send_text(self, text: str) -> None:
