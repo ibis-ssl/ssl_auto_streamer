@@ -613,9 +613,42 @@ class CommentaryApp:
     def get_available_scenarios(self) -> List[Dict[str, Any]]:
         """Return list of available scenario logs for replay."""
         scenarios_dir = Path(__file__).parent.parent / "tests" / "data" / "scenarios"
+        real_cuts_dir = Path(__file__).parent.parent / "tests" / "data" / "real_cuts"
         sample_log = Path(__file__).parent.parent / "tests" / "data" / "sample_match.log.gz"
 
         metadata_map = {
+            # 実試合切り出し（公式大会実データ）
+            "real_goal_and_timeout.log.gz": {
+                "name": "実試合: ibis vs TRAPS — 先制ゴール・タイムアウト (75秒)",
+                "category": "実試合切り出し",
+                "description": "公式戦実データ。キックオフ、パス連携、ibis先制ゴール、TRAPSのタイムアウトを含む白熱の攻防",
+                "recommended": True,
+            },
+            "real_foul_placement_card.log.gz": {
+                "name": "実試合: ibis vs RoboDragons — 衝突・妨害・累積カード (45秒)",
+                "category": "実試合切り出し",
+                "description": "公式戦実データ。ロボット衝突、ボールアウト、プレイスメント妨害の累積によるイエローカード提示",
+                "recommended": True,
+            },
+            "real_fast_shot_and_placement.log.gz": {
+                "name": "実試合: ibis vs RoboDragons — 高速キック反則・配置 (45秒)",
+                "category": "実試合切り出し",
+                "description": "公式戦実データ。速度超過キック反則、ラインアウト、ボールプレイスメント、STOP判定",
+                "recommended": False,
+            },
+            "real_foul_and_card.log.gz": {
+                "name": "実試合: ibis vs RoboDragons — 配置失敗・累積反則 (40秒)",
+                "category": "実試合切り出し",
+                "description": "公式戦実データ。プレイスメント時間切れ失敗、複数ファウル宣告、イエローカード提示",
+                "recommended": False,
+            },
+            # 既存マッチ・シナリオ
+            "sample_match.log.gz": {
+                "name": "サンプルマッチ: フルゲーム攻防・VAR (65秒)",
+                "category": "実試合切り出し",
+                "description": "実試合ログ。パス・シュート・ゴール判定審議・得点承認を含む総合マッチログ",
+                "recommended": True,
+            },
             "scenario_8_tactical_foul_and_card.log.gz": {
                 "name": "シナリオ8: 危険な衝突・イエローカード・直接FK (40秒)",
                 "category": "長尺マッチ",
@@ -626,12 +659,6 @@ class CommentaryApp:
                 "name": "シナリオ7: カウンター速攻・リバウンドゴール・VAR (42秒)",
                 "category": "長尺マッチ",
                 "description": "キックオフ、パス連携、インターセプト、高速カウンター、シュート、セーブ、リバウンドゴール、判定審議、ゴール確定",
-                "recommended": True,
-            },
-            "sample_match.log.gz": {
-                "name": "サンプルマッチ: フルゲーム攻防 (65秒)",
-                "category": "長尺マッチ",
-                "description": "試合開始から複数回の攻防、シュート、STOP、解説モード遷移を含む総合マッチログ",
                 "recommended": True,
             },
             "scenario_1_goal.log.gz": {
@@ -674,6 +701,21 @@ class CommentaryApp:
 
         results: List[Dict[str, Any]] = []
 
+        # 1. 実試合切り出しディレクトリ (real_cuts)
+        if real_cuts_dir.exists():
+            for p in sorted(real_cuts_dir.glob("*.log.gz")):
+                meta = metadata_map.get(p.name, {})
+                results.append({
+                    "id": p.stem.replace(".log", ""),
+                    "filename": p.name,
+                    "path": str(p),
+                    "name": meta.get("name", p.name),
+                    "category": meta.get("category", "実試合切り出し"),
+                    "description": meta.get("description", ""),
+                    "recommended": meta.get("recommended", False),
+                })
+
+        # 2. サンプルマッチ
         if sample_log.exists():
             meta = metadata_map.get(sample_log.name, {})
             results.append({
@@ -681,11 +723,12 @@ class CommentaryApp:
                 "filename": sample_log.name,
                 "path": str(sample_log),
                 "name": meta.get("name", sample_log.name),
-                "category": meta.get("category", "長尺マッチ"),
+                "category": meta.get("category", "実試合切り出し"),
                 "description": meta.get("description", ""),
                 "recommended": meta.get("recommended", True),
             })
 
+        # 3. 合成テストシナリオ (scenarios)
         if scenarios_dir.exists():
             for p in sorted(scenarios_dir.glob("*.log.gz")):
                 meta = metadata_map.get(p.name, {})
@@ -699,8 +742,15 @@ class CommentaryApp:
                     "recommended": meta.get("recommended", False),
                 })
 
-        # Recommended first, then by category (長尺マッチ first), then by name
-        results.sort(key=lambda x: (not x.get("recommended", False), x.get("category") != "長尺マッチ", x.get("name", "")))
+        # Category priority: 実試合切り出し (0) -> 長尺マッチ (1) -> 基本シナリオ (2) -> その他 (3)
+        cat_order = {"実試合切り出し": 0, "長尺マッチ": 1, "基本シナリオ": 2}
+        results.sort(
+            key=lambda x: (
+                not x.get("recommended", False),
+                cat_order.get(x.get("category", ""), 3),
+                x.get("name", ""),
+            )
+        )
         return results
 
     async def run_pytest_suite(self) -> Dict[str, Any]:
