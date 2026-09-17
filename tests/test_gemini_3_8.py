@@ -214,3 +214,65 @@ def test_switch_model():
 
     asyncio.run(_test())
 
+
+def test_barge_in_modes_behavior():
+    """Verify auto vs rule_based barge-in behavior during active speech."""
+    import asyncio
+    from ssl_auto_streamer.app import CommentaryApp
+    from ssl_auto_streamer.event_detector import DetectedEvent
+
+    async def _test():
+        config = {
+            "gemini": {"api_key": "dummy"},
+            "commentary": {"barge_in": "auto", "interrupt_priority_threshold": 2},
+            "web": {"enabled": False},
+        }
+        app = CommentaryApp(config)
+        assert app._barge_in_mode == "auto"
+
+        app._connected = True
+        app._streaming = True
+        app._gemini_client._is_generating = True  # simulate speaking
+
+        sent_payloads = []
+
+        async def mock_send_reflex(payload, priority):
+            sent_payloads.append((payload, priority))
+
+        app._send_reflex = mock_send_reflex
+
+        # In auto mode, low priority event (PASS, priority=1) is NOT dropped, delegated to Gemini
+        ev = DetectedEvent(
+            event_type="PASS",
+            position=(0.0, 0.0),
+            ball_speed=2.0,
+            confidence=1.0,
+            metadata={},
+        )
+        app._on_detected_event(ev)
+        await asyncio.sleep(0.01)
+        assert len(sent_payloads) == 1
+
+        # Switch to rule_based mode
+        app._barge_in_mode = "rule_based"
+        app._last_commentary_time.clear()
+        app._last_request_time = 0.0
+
+        # In rule_based mode, priority=1 is dropped during active speech
+        app._on_detected_event(ev)
+        await asyncio.sleep(0.01)
+        assert len(sent_payloads) == 1  # Still 1, dropped!
+
+        # High priority event (FAST_SHOT / GOAL, priority>=2) triggers barge-in
+        shot_ev = DetectedEvent(
+            event_type="FAST_SHOT",
+            position=(2.0, 0.0),
+            ball_speed=6.0,
+            confidence=1.0,
+            metadata={},
+        )
+        app._on_detected_event(shot_ev)
+        await asyncio.sleep(0.01)
+        assert len(sent_payloads) == 2  # Dispatched!
+
+    asyncio.run(_test())

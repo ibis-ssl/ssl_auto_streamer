@@ -206,6 +206,7 @@ class CommentaryApp:
         # Commentary settings
         self._analyst_threshold = commentary_cfg.get("analyst_silence_threshold", 5.0)
         self._writer_update_rate = commentary_cfg.get("writer_update_rate", 1.0)
+        self._barge_in_mode = commentary_cfg.get("barge_in", "auto")
         self._interrupt_priority_threshold = commentary_cfg.get("interrupt_priority_threshold", 2)
         self._auto_start = bool(commentary_cfg.get("auto_start", False))
 
@@ -945,10 +946,11 @@ class CommentaryApp:
         self._reader.set_mode(CommentaryMode.REFLEX)
         request = self._reader.generate_reflex(event.event_type, event_data)
 
-        # 直前リクエストとの短時間競合ガード（0.8秒以内）: 新イベントの優先度が直前以下ならスキップ
+        # 直前リクエストとの短時間競合ガード（0.8秒以内）: 新イベントの優先度が直前以下かつ低優先度ならスキップ
         if (
             current_time - self._last_request_time < 0.8
             and request.priority <= self._last_request_priority
+            and request.priority < 2
         ):
             logger.info(
                 f"Skipping {event.event_type} (rapid succession: prio {request.priority} <= last prio {self._last_request_priority})"
@@ -957,7 +959,15 @@ class CommentaryApp:
 
         if request.priority >= 1:
             if self._is_speaking:
-                if (
+                if self._barge_in_mode == "auto":
+                    # Gemini 3.8 Live による自動判断:
+                    # 発話中であってもイベントをドロップせず Gemini へストリーミング送信する。
+                    # クライアント側で事前に音声を破棄せず、Gemini が interrupted シグナルを
+                    # 返してきた際に _on_gemini_interrupted() で音声バッファをクリアする。
+                    logger.info(
+                        f"Event {event.event_type} during speech delegated to Gemini 3.8 Live auto barge-in"
+                    )
+                elif (
                     request.priority >= self._interrupt_priority_threshold
                     or prev_mode == CommentaryMode.ANALYST
                 ):
@@ -1249,6 +1259,9 @@ class CommentaryApp:
         )
         self._writer_update_rate = commentary_cfg.get(
             "writer_update_rate", self._writer_update_rate
+        )
+        self._barge_in_mode = commentary_cfg.get(
+            "barge_in", self._barge_in_mode
         )
         self._interrupt_priority_threshold = commentary_cfg.get(
             "interrupt_priority_threshold", self._interrupt_priority_threshold
